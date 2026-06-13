@@ -1,14 +1,14 @@
+import QueryClientWrapper from "@/app/query-client-wrapper";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { ThemeProvider } from "next-themes";
+import { Plus_Jakarta_Sans, Inter } from "next/font/google";
 import "./globals.css";
+import { cn } from "@/lib/utils";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const plusJakartaSans = Plus_Jakarta_Sans({
+  variable: "--font-plus-jakarta-sans",
   subsets: ["latin"],
 });
 
@@ -22,12 +22,26 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
+
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={cn(plusJakartaSans.variable, "font-sans", inter.variable)}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="bg-background">
+        <ThemeProvider
+          attribute={["class", "data-theme"]}
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <QueryClientWrapper>
+            {children}
+          </QueryClientWrapper>
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

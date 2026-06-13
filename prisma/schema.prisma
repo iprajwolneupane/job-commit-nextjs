@@ -1,0 +1,65 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AppliedJobResponseEnum {
+  NORESPONSE
+  REJECTED
+  INTERVIEW
+  OFFER
+  ACCEPTED
+  NOTINTERESTED
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  sessionToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String       @id @default(cuid())
+  username      String
+  email         String       @unique
+  passwordHash  String?
+  emailVerified DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  session       Session?
+  appliedJobs   AppliedJob[]
+
+  @@index([createdAt, id, email])
+}
+
+model AppliedJob {
+  id          String                 @id @default(cuid())
+  userId      String
+  appliedDate DateTime
+  platform    String
+  company     String
+  position    String
+  sendMailAt  DateTime
+  sentMail    Boolean                @default(false)
+  response    AppliedJobResponseEnum @default(NORESPONSE)
+  link        String
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, appliedDate])
+  @@index([userId, response])
+  @@index([userId, sendMailAt])
+}
