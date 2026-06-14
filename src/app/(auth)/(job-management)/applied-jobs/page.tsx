@@ -14,15 +14,30 @@ import {
 } from '@/components/ui/breadcrumb'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
+import SearchInput from '@/components/ui/search-input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { appliedJobResponseValues } from '@/lib/schema'
 import { cn, handleError } from '@/lib/utils'
 import { AuthService, type AppliedJob } from '@/lib/service'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { AxiosError } from 'axios'
-import { format, isAfter, isBefore, startOfDay } from 'date-fns'
+import {
+  differenceInCalendarDays,
+  format,
+  isAfter,
+  isBefore,
+  startOfDay,
+  subDays,
+} from 'date-fns'
 import {
   ArrowRight,
-  CheckCircle2,
   ExternalLink,
   Mail,
   MailCheck,
@@ -34,19 +49,37 @@ import Link from 'next/link'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+const DATE_PARAM_FORMAT = 'yyyy-MM-dd'
+const ALL_RESPONSES = 'ALL'
+
 type AppliedJobErrorResponse = {
   message?: string
   errors?: Record<string, Array<string> | undefined>
 }
 
 export default function Page() {
-  const [fromDate, setFromDate] = useState<Date>()
-  const [toDate, setToDate] = useState<Date>()
+  const [fromDate, setFromDate] = useState<Date>(() =>
+    subDays(startOfDay(new Date()), 7),
+  )
+  const [toDate, setToDate] = useState<Date>(() => startOfDay(new Date()))
+  const [search, setSearch] = useState('')
+  const [responseFilter, setResponseFilter] = useState<
+    AppliedJob['response'] | typeof ALL_RESPONSES
+  >(ALL_RESPONSES)
   const queryClient = useQueryClient()
+  const appliedJobsParams = useMemo(
+    () => ({
+      fromDate: format(fromDate, DATE_PARAM_FORMAT),
+      toDate: format(toDate, DATE_PARAM_FORMAT),
+      query: search,
+      response: responseFilter,
+    }),
+    [fromDate, responseFilter, search, toDate],
+  )
 
   const { data, isFetching, isPending, error } = useQuery({
-    queryKey: ['applied-jobs'],
-    queryFn: AuthService.getAppliedJobs,
+    queryKey: ['applied-jobs', appliedJobsParams],
+    queryFn: () => AuthService.getAppliedJobs(appliedJobsParams),
   })
 
   const deleteAppliedJobMutation = useMutation({
@@ -61,14 +94,14 @@ export default function Page() {
   })
 
   const updateSentMailMutation = useMutation({
-    mutationFn: ({ id, sentMail }: { id: string; sentMail: boolean }) =>
+    mutationFn: (id: string) =>
       AuthService.updateAppliedJob({
         id,
-        values: { sentMail },
+        values: { sentMail: true },
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['applied-jobs'] })
-      toast.success('Mail status updated')
+      toast.success('Mail marked as sent')
     },
     onError: (error: AxiosError<AppliedJobErrorResponse>) => {
       handleError<AppliedJobErrorResponse>(error)
@@ -76,65 +109,35 @@ export default function Page() {
   })
 
   const appliedJobs = data?.appliedJobs ?? []
-  const filteredJobs = useMemo(
-    () =>
-      appliedJobs.filter((job) => {
-        const appliedDate = startOfDay(new Date(job.appliedDate))
-        const start = fromDate ? startOfDay(fromDate) : undefined
-        const end = toDate ? startOfDay(toDate) : undefined
-
-        if (start && isBefore(appliedDate, start)) return false
-        if (end && isAfter(appliedDate, end)) return false
-
-        return true
-      }),
-    [appliedJobs, fromDate, toDate],
-  )
 
   const columns: ColumnDef<AppliedJob>[] = useMemo(
     () => [
       {
-        id: 'serial',
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="S.No." />
-        ),
-        enableSorting: false,
-        cell: ({ row, table }) => {
-          const rows = table.getRowModel().rows
-          const localIndex = rows.findIndex((tableRow) => tableRow.id === row.id)
-
-          return (
-            localIndex +
-            table.getState().pagination.pageSize *
-            table.getState().pagination.pageIndex +
-            1
-          )
-        },
-      },
-      {
         accessorKey: 'appliedDate',
         header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Applied Date" />
+          <DataTableColumnHeader column={column} title="Date" />
         ),
-        cell: ({ row }) => format(new Date(row.original.appliedDate), 'PPP'),
-      },
-      {
-        accessorKey: 'company',
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Company" />
-        ),
-      },
-      {
-        accessorKey: 'position',
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Position" />
-        ),
+        cell: ({ row }) => format(new Date(row.original.appliedDate), 'PP'),
       },
       {
         accessorKey: 'platform',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Platform" />
         ),
+      },
+      {
+        accessorKey: 'company',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Company" />
+        ),
+        accessorFn: (row) => row.company.slice(0, 25),
+      },
+      {
+        accessorKey: 'position',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Position" />
+        ),
+        accessorFn: (row) => row.position.slice(0, 40),
       },
       {
         accessorKey: 'response',
@@ -153,35 +156,43 @@ export default function Page() {
         ),
       },
       {
-        accessorKey: 'sendMailAt',
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title="Follow-up" />
-        ),
-        cell: ({ row }) => format(new Date(row.original.sendMailAt), 'PPP'),
-      },
-      {
         accessorKey: 'sentMail',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Mail" />
         ),
-        cell: ({ row }) => (
-          <Button
-            type="button"
-            variant={row.original.sentMail ? 'secondary' : 'outline'}
-            size="sm"
-            className="h-8 rounded-full text-xs"
-            disabled={updateSentMailMutation.isPending}
-            onClick={() =>
-              updateSentMailMutation.mutate({
-                id: row.original.id,
-                sentMail: !row.original.sentMail,
-              })
-            }
-          >
-            {row.original.sentMail ? <MailCheck /> : <Mail />}
-            {row.original.sentMail ? 'Sent' : 'Pending'}
-          </Button>
-        ),
+        cell: ({ row }) => {
+          if (row.original.sentMail) {
+            return (
+              <span className="inline-flex h-8 items-center gap-2 rounded-full bg-success-soft px-3 text-xs font-medium text-success-foreground">
+                <MailCheck className="size-4" />
+                Sent
+              </span>
+            )
+          }
+
+          return (
+            <AlertDialog
+              asChild
+              title="Mark mail as sent?"
+              description="This will mark the follow-up mail as sent for this applied job."
+              actionText="Yes, mark sent"
+              actionHandler={() => updateSentMailMutation.mutate(row.original.id)}
+              isLoading={updateSentMailMutation.isPending}
+              buttonVariant="default"
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-full text-xs"
+                disabled={updateSentMailMutation.isPending}
+              >
+                <Mail />
+                {formatFollowUpDiff(row.original.sendMailAt)}
+              </Button>
+            </AlertDialog>
+          )
+        },
       },
       {
         id: 'link',
@@ -272,15 +283,9 @@ export default function Page() {
           </BreadcrumbList>
         </Breadcrumb>
       </Header>
-
-      <main className="p-4">
-        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-medium">Applied Jobs</h1>
-            <p className="text-sm text-muted-foreground">
-              Track applications, follow-ups, responses, and mail status.
-            </p>
-          </div>
+      <div className="flex flex-col m-5 p-4 mb-4 rounded-lg border border-sidebar-border bg-card text-card-foreground shadow-sm">
+        <div className='flex w-full justify-between items-center'>
+          <h1 className="text-xl font-medium">({appliedJobs.length}) Applied Jobs</h1>
           <Button asChild>
             <Link href="/applied-jobs/add">
               <Plus />
@@ -288,58 +293,77 @@ export default function Page() {
             </Link>
           </Button>
         </div>
-
         <Suspense fallback={<div className="rounded-md border p-4">Loading...</div>}>
           <DataTable<AppliedJob, unknown>
             columns={columns}
-            data={filteredJobs}
-            totalEntries={filteredJobs.length}
+            data={appliedJobs}
+            totalEntries={appliedJobs.length}
             isFetching={isFetching || isPending}
+            showPagination={false}
           >
-            <div className="flex flex-wrap items-center gap-3">
-              <DatePicker
-                selected={fromDate}
-                onSelect={(date: Date | undefined) => {
-                  setFromDate(date)
-                  if (date && toDate && isAfter(date, toDate)) {
-                    setToDate(date)
-                  }
-                }}
-                disabled={toDate ? { after: toDate } : undefined}
-                placeholder="From date"
+            <div className="flex w-full justify-between items-center">
+              <SearchInput
+                placeholder="Search company or position"
+                value={search}
+                onValueChange={setSearch}
+                debounce
+                className="w-full sm:w-72"
               />
-              <ArrowRight className="size-4 text-muted-foreground" />
-              <DatePicker
-                selected={toDate}
-                onSelect={(date: Date | undefined) => {
-                  setToDate(date)
-                  if (date && fromDate && isBefore(date, fromDate)) {
-                    setFromDate(date)
+              <div className='flex items-center gap-4'>
+                <div className='flex items-center gap-2'>
+                  <div className='w-40'>
+                    <DatePicker
+                      selected={fromDate}
+                      onSelect={(date: Date | undefined) => {
+                        if (!date) return
+                        setFromDate(date)
+                        if (isAfter(date, toDate)) {
+                          setToDate(date)
+                        }
+                      }}
+                      disabled={toDate ? { after: toDate } : undefined}
+                      placeholder="From date"
+                    />
+                  </div>
+                  <ArrowRight className="size-4 text-muted-foreground" />
+                  <div className='w-40'>
+                    <DatePicker
+                      selected={toDate}
+                      onSelect={(date: Date | undefined) => {
+                        if (!date) return
+                        setToDate(date)
+                        if (isBefore(date, fromDate)) {
+                          setFromDate(date)
+                        }
+                      }}
+                      disabled={fromDate ? { before: fromDate } : undefined}
+                      placeholder="To date"
+                    />
+                  </div>
+                </div>
+                <Select
+                  value={responseFilter}
+                  onValueChange={(value) =>
+                    setResponseFilter(value as AppliedJob['response'] | typeof ALL_RESPONSES)
                   }
-                }}
-                disabled={fromDate ? { before: fromDate } : undefined}
-                placeholder="To date"
-              />
-              {(fromDate || toDate) && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setFromDate(undefined)
-                    setToDate(undefined)
-                  }}
                 >
-                  Clear
-                </Button>
-              )}
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <CheckCircle2 className="size-4" />
-                {filteredJobs.length} records
+                  <SelectTrigger className="h-8 w-full bg-background sm:w-30">
+                    <SelectValue placeholder="All responses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_RESPONSES}>All</SelectItem>
+                    {appliedJobResponseValues.map((response) => (
+                      <SelectItem key={response} value={response}>
+                        {formatResponse(response)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </DataTable>
         </Suspense>
-      </main>
+      </div>
     </>
   )
 }
@@ -350,6 +374,14 @@ function formatResponse(response: AppliedJob['response']) {
     .replace('noresponse', 'no response')
     .replace('notinterested', 'not interested')
     .replace(/^\w/, (letter) => letter.toUpperCase())
+}
+
+function formatFollowUpDiff(sendMailAt: string) {
+  const days = differenceInCalendarDays(new Date(), new Date(sendMailAt))
+
+  if (days === 0) return 'Today'
+
+  return `${days} ${Math.abs(days) === 1 ? 'day' : 'days'}`
 }
 
 function getResponseClassName(response: AppliedJob['response']) {

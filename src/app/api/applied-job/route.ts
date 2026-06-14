@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import * as z from 'zod'
+import { endOfDay, isValid, parseISO, startOfDay } from 'date-fns'
 import { AppliedJobResponseEnum } from '@/generated/prisma/enums'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { createAppliedJobSchema } from '@/lib/schema'
+import { appliedJobResponseValues, createAppliedJobSchema } from '@/lib/schema'
 
 const appliedJobSelect = {
   id: true,
@@ -22,6 +23,28 @@ function getSendMailAt(appliedDate: Date) {
   return new Date(appliedDate.getTime() + 3 * 24 * 60 * 60 * 1000)
 }
 
+function parseDateFilter(value: string | null, boundary: 'start' | 'end') {
+  if (!value) return undefined
+
+  const parsed = parseISO(value)
+
+  if (!isValid(parsed)) return undefined
+
+  return boundary === 'start' ? startOfDay(parsed) : endOfDay(parsed)
+}
+
+function sanitizeSearch(value: string | null) {
+  return (value ?? '').toLowerCase().replace(/\s+/g, '')
+}
+
+function isAppliedJobResponse(
+  value: string | null,
+): value is (typeof appliedJobResponseValues)[number] {
+  return appliedJobResponseValues.includes(
+    value as (typeof appliedJobResponseValues)[number],
+  )
+}
+
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser(request)
 
@@ -29,9 +52,32 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
   }
 
+  const fromDate = parseDateFilter(
+    request.nextUrl.searchParams.get('fromDate'),
+    'start',
+  )
+  const toDate = parseDateFilter(
+    request.nextUrl.searchParams.get('toDate'),
+    'end',
+  )
+  const query = sanitizeSearch(request.nextUrl.searchParams.get('query'))
+  const responseParam = request.nextUrl.searchParams.get('response')
+  const response = isAppliedJobResponse(responseParam)
+    ? responseParam
+    : undefined
+
   const appliedJobs = await prisma.appliedJob.findMany({
     where: {
       userId: user.id,
+      ...(response ? { response } : {}),
+      ...(fromDate || toDate
+        ? {
+            appliedDate: {
+              ...(fromDate ? { gte: fromDate } : {}),
+              ...(toDate ? { lte: toDate } : {}),
+            },
+          }
+        : {}),
     },
     orderBy: {
       appliedDate: 'desc',
@@ -39,7 +85,16 @@ export async function GET(request: NextRequest) {
     select: appliedJobSelect,
   })
 
-  return NextResponse.json({ appliedJobs })
+  const filteredAppliedJobs = query
+    ? appliedJobs.filter((job) => {
+        const company = sanitizeSearch(job.company)
+        const position = sanitizeSearch(job.position)
+
+        return company.includes(query) || position.includes(query)
+      })
+    : appliedJobs
+
+  return NextResponse.json({ appliedJobs: filteredAppliedJobs })
 }
 
 export async function POST(request: NextRequest) {

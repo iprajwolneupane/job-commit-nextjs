@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AxiosError } from 'axios'
-import { ArrowLeft, Save } from 'lucide-react'
+import { Save } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect } from 'react'
@@ -19,6 +19,7 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
 import {
   Form,
@@ -131,6 +132,7 @@ export default function Page() {
     const payload = {
       ...values,
       link: values.link.trim() ? values.link : undefined,
+      sentMail: values.sentMail ? true : undefined,
     }
 
     updateAppliedJobMutation.mutate({
@@ -144,7 +146,7 @@ export default function Page() {
     ? new Date(appliedDate.getTime() + 3 * 24 * 60 * 60 * 1000)
     : data?.appliedJob?.sendMailAt
       ? new Date(data.appliedJob.sendMailAt)
-    : undefined
+      : undefined
 
   return (
     <>
@@ -171,22 +173,9 @@ export default function Page() {
       </Header>
 
       <div className="m-5 flex flex-col gap-6 rounded-lg border border-sidebar-border bg-card p-4 text-card-foreground shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">
-              Edit applied job
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Update the application details and mail status.
-            </p>
-          </div>
-          <Button variant="outline" asChild>
-            <Link href="/applied-jobs">
-              <ArrowLeft />
-              Back
-            </Link>
-          </Button>
-        </div>
+        <h1 className="text-2xl font-semibold text-foreground">
+          Edit applied job
+        </h1>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -335,14 +324,12 @@ export default function Page() {
                     <FormLabel>Mail status</FormLabel>
                     <FormControl>
                       <label className="flex h-10 items-center gap-3 rounded-md border bg-background px-3 text-sm">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={field.value}
-                          onChange={(event) =>
-                            field.onChange(event.target.checked)
+                          onCheckedChange={(checked) =>
+                            field.onChange(checked === true)
                           }
                           disabled={isBusy}
-                          className="size-4 accent-primary"
                         />
                         Sent follow-up mail
                       </label>

@@ -27,6 +27,13 @@ export type AppliedJob = {
   link: string
 }
 
+export type AppliedJobsParams = {
+  fromDate?: string
+  toDate?: string
+  query?: string
+  response?: AppliedJob['response'] | 'ALL'
+}
+
 export const AuthService = {
   async me() {
     const response = await axios.get<AuthProfile>('/api/auth/me')
@@ -53,9 +60,10 @@ export const AuthService = {
 
     return response.data
   },
-  async getAppliedJobs() {
+  async getAppliedJobs(params?: AppliedJobsParams) {
     const response = await axios.get<{ appliedJobs: AppliedJob[] }>(
       '/api/applied-job',
+      { params },
     )
 
     return response.data

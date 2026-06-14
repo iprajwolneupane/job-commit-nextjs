@@ -94,6 +94,7 @@ export async function PUT(
     },
     select: {
       id: true,
+      sentMail: true,
     },
   })
 
@@ -102,6 +103,25 @@ export async function PUT(
       { message: 'Applied job not found' },
       { status: 404 },
     )
+  }
+
+  if (result.data.sentMail === false) {
+    return NextResponse.json(
+      { message: 'Sent mail status cannot be reverted' },
+      { status: 400 },
+    )
+  }
+
+  if (result.data.sentMail === true && existingAppliedJob.sentMail) {
+    const appliedJob = await prisma.appliedJob.findFirst({
+      where: {
+        id: existingAppliedJob.id,
+        userId: user.id,
+      },
+      select: appliedJobSelect,
+    })
+
+    return NextResponse.json({ appliedJob })
   }
 
   const updateData = {

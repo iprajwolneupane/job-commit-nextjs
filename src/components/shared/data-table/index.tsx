@@ -36,6 +36,7 @@ interface DataTableProps<TData, TValue> {
   selectedRows?: RowSelectionState;
   setSelectedRows?: React.Dispatch<React.SetStateAction<RowSelectionState>>;
   footer?: React.ReactNode;
+  showPagination?: boolean;
 }
 
 export function DataTable<TData, TValue>({
@@ -49,6 +50,7 @@ export function DataTable<TData, TValue>({
   selectedRows = {},
   setSelectedRows,
   footer,
+  showPagination = true,
 }: DataTableProps<TData, TValue>) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -102,7 +104,7 @@ export function DataTable<TData, TValue>({
     getSubRows: (row) => (row as { children?: TData[] }).children,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    getPaginationRowModel: showPagination ? getPaginationRowModel() : undefined,
     getFilteredRowModel: getFilteredRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
     state: {
@@ -135,7 +137,7 @@ export function DataTable<TData, TValue>({
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:justify-between">
         {children}
-        <DataTablePagination table={table} />
+        {showPagination && <DataTablePagination table={table} />}
       </div>
       <div className="overflow-hidden rounded-md border">
         <Table>
@@ -164,7 +166,7 @@ export function DataTable<TData, TValue>({
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
                   className={cn(
-                    'odd:bg-gray-50 dark:odd:bg-gray-800',
+                    'odd:bg-gray-50 dark:odd:bg-gray-800 text-xs',
                     isFetching ? 'opacity-60' : '',
                   )}
                 >
