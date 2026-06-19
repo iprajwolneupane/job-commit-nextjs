@@ -47,14 +47,19 @@ export const appliedJobResponseValues = [
   'NORESPONSE',
   'REJECTED',
   'INTERVIEW',
+  'SCREENINGQUESTIONS',
   'OFFER',
   'ACCEPTED',
   'NOTINTERESTED',
 ] as const
 
+export const platformSchema = z.object({
+  name: z.string().trim().min(1, 'Platform name is required'),
+})
+
 export const createAppliedJobSchema = z.object({
   appliedDate: z.coerce.date(),
-  platform: z.string().trim().min(1, 'Platform is required'),
+  platformId: z.string().trim().min(1, 'Platform is required'),
   company: z.string().trim().min(1, 'Company is required'),
   position: z.string().trim().min(1, 'Position is required'),
   response: z.enum(appliedJobResponseValues).optional(),
@@ -64,7 +69,7 @@ export const createAppliedJobSchema = z.object({
 export const updateAppliedJobSchema = z
   .object({
     appliedDate: z.coerce.date().optional(),
-    platform: z.string().trim().min(1, 'Platform is required').optional(),
+    platformId: z.string().trim().min(1, 'Platform is required').optional(),
     company: z.string().trim().min(1, 'Company is required').optional(),
     position: z.string().trim().min(1, 'Position is required').optional(),
     sentMail: z.boolean().optional(),
@@ -77,3 +82,10 @@ export const updateAppliedJobSchema = z
 
 export type CreateAppliedJobValues = z.infer<typeof createAppliedJobSchema>
 export type UpdateAppliedJobValues = z.infer<typeof updateAppliedJobSchema>
+export type PlatformValues = z.infer<typeof platformSchema>
+
+export const getJobReportSchema = z.object({
+  link: z.string().url('Invalid URL'),
+});
+
+export type GetJobReportValues = z.infer<typeof getJobReportSchema>

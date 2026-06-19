@@ -1,12 +1,11 @@
 'use client'
-
 import {
     Sidebar,
     SidebarContent,
     SidebarFooter,
     SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider
 } from "@/components/ui/sidebar";
-import { LayoutDashboardIcon } from "lucide-react";
+import { ChartPie, FileText, LayoutDashboardIcon, Tags } from "lucide-react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 
@@ -40,10 +39,26 @@ export function AppSidebar() {
             label: 'Job Management',
             items: [
                 {
+                    name: 'Job Report',
+                    url: '/job-report',
+                    icon: ChartPie,
+                },
+                {
                     name: 'Applied Jobs',
                     url: '/applied-jobs',
                     icon: LayoutDashboardIcon,
                 },
+                {
+                    name: 'Platforms',
+                    url: '/platforms',
+                    icon: Tags,
+                },
+                {
+                    name: 'Uploaded CV',
+                    url: '/uploaded-cv',
+                    icon: FileText,
+                },
+
             ],
         }
     ];
@@ -73,7 +88,7 @@ export function AppSidebar() {
                             {
                                 grp.label && <SidebarGroupLabel>{grp.label}</SidebarGroupLabel>
                             }
-                            <SidebarMenu>
+                            <SidebarMenu className="gap-2">
                                 {grp.items.map((item) => (
                                     <SidebarMenuItem key={item.name}>
                                         <SidebarMenuButton asChild

@@ -11,8 +11,8 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { SecureInput } from '@/components/ui/secure-input'
+import { AuthApi } from '@/lib/api'
 import { signupSchema, type SignupFormValues } from '@/lib/schema'
-import { AuthService } from '@/lib/service'
 import { handleError } from '@/lib/utils'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
@@ -49,7 +49,7 @@ function SignupPage() {
     })
 
     const registerMutation = useMutation({
-        mutationFn: AuthService.register,
+        mutationFn: AuthApi.register,
         onSuccess: () => {
             router.push('/')
             toast.success('Account created successfully')

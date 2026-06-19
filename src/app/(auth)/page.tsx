@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { AuthService } from '@/lib/service'
+import { AuthApi } from '@/lib/api'
 
 export default function Home() {
   const router = useRouter()
@@ -16,7 +16,7 @@ export default function Home() {
   const ThemeIcon = resolvedTheme === 'dark' ? Sun : Moon
 
   const logoutMutation = useMutation({
-    mutationFn: AuthService.logout,
+    mutationFn: AuthApi.logout,
     onSuccess: () => {
       toast.success('Logged out')
       router.replace('/login')

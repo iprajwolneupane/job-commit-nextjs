@@ -7,8 +7,14 @@ import { updateAppliedJobSchema } from '@/lib/schema'
 const appliedJobSelect = {
   id: true,
   userId: true,
+  platformId: true,
   appliedDate: true,
-  platform: true,
+  platform: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
   company: true,
   position: true,
   sendMailAt: true,
@@ -19,6 +25,20 @@ const appliedJobSelect = {
 
 function getSendMailAt(appliedDate: Date) {
   return new Date(appliedDate.getTime() + 3 * 24 * 60 * 60 * 1000)
+}
+
+async function userOwnsPlatform(userId: string, platformId: string) {
+  const platform = await prisma.platform.findFirst({
+    where: {
+      id: platformId,
+      userId,
+    },
+    select: {
+      id: true,
+    },
+  })
+
+  return Boolean(platform)
 }
 
 type AppliedJobRouteContext = {
@@ -112,16 +132,11 @@ export async function PUT(
     )
   }
 
-  if (result.data.sentMail === true && existingAppliedJob.sentMail) {
-    const appliedJob = await prisma.appliedJob.findFirst({
-      where: {
-        id: existingAppliedJob.id,
-        userId: user.id,
-      },
-      select: appliedJobSelect,
-    })
-
-    return NextResponse.json({ appliedJob })
+  if (
+    result.data.platformId &&
+    !(await userOwnsPlatform(user.id, result.data.platformId))
+  ) {
+    return NextResponse.json({ message: 'Platform not found' }, { status: 404 })
   }
 
   const updateData = {

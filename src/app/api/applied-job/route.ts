@@ -1,6 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import * as z from 'zod'
-import { endOfDay, isValid, parseISO, startOfDay } from 'date-fns'
+import {
+  endOfDay,
+  endOfMonth,
+  isValid,
+  parseISO,
+  startOfDay,
+  startOfMonth,
+} from 'date-fns'
 import { AppliedJobResponseEnum } from '@/generated/prisma/enums'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -9,8 +16,14 @@ import { appliedJobResponseValues, createAppliedJobSchema } from '@/lib/schema'
 const appliedJobSelect = {
   id: true,
   userId: true,
+  platformId: true,
   appliedDate: true,
-  platform: true,
+  platform: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
   company: true,
   position: true,
   sendMailAt: true,
@@ -23,6 +36,20 @@ function getSendMailAt(appliedDate: Date) {
   return new Date(appliedDate.getTime() + 3 * 24 * 60 * 60 * 1000)
 }
 
+async function userOwnsPlatform(userId: string, platformId: string) {
+  const platform = await prisma.platform.findFirst({
+    where: {
+      id: platformId,
+      userId,
+    },
+    select: {
+      id: true,
+    },
+  })
+
+  return Boolean(platform)
+}
+
 function parseDateFilter(value: string | null, boundary: 'start' | 'end') {
   if (!value) return undefined
 
@@ -31,6 +58,22 @@ function parseDateFilter(value: string | null, boundary: 'start' | 'end') {
   if (!isValid(parsed)) return undefined
 
   return boundary === 'start' ? startOfDay(parsed) : endOfDay(parsed)
+}
+
+function getAppliedDateFilter(fromDate?: Date, toDate?: Date) {
+  if (fromDate || toDate) {
+    return {
+      ...(fromDate ? { gte: fromDate } : {}),
+      ...(toDate ? { lte: toDate } : {}),
+    }
+  }
+
+  const now = new Date()
+
+  return {
+    gte: startOfMonth(now),
+    lte: endOfMonth(now),
+  }
 }
 
 function sanitizeSearch(value: string | null) {
@@ -65,19 +108,13 @@ export async function GET(request: NextRequest) {
   const response = isAppliedJobResponse(responseParam)
     ? responseParam
     : undefined
+  const appliedDateFilter = getAppliedDateFilter(fromDate, toDate)
 
   const appliedJobs = await prisma.appliedJob.findMany({
     where: {
       userId: user.id,
       ...(response ? { response } : {}),
-      ...(fromDate || toDate
-        ? {
-            appliedDate: {
-              ...(fromDate ? { gte: fromDate } : {}),
-              ...(toDate ? { lte: toDate } : {}),
-            },
-          }
-        : {}),
+      appliedDate: appliedDateFilter,
     },
     orderBy: {
       appliedDate: 'desc',
@@ -124,11 +161,15 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  if (!(await userOwnsPlatform(user.id, result.data.platformId))) {
+    return NextResponse.json({ message: 'Platform not found' }, { status: 404 })
+  }
+
   const appliedJob = await prisma.appliedJob.create({
     data: {
       userId: user.id,
       appliedDate: result.data.appliedDate,
-      platform: result.data.platform,
+      platformId: result.data.platformId,
       company: result.data.company,
       position: result.data.position,
       sendMailAt: getSendMailAt(result.data.appliedDate),

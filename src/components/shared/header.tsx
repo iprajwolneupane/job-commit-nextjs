@@ -15,7 +15,7 @@ import {
 import { Separator } from '@/components/ui/seperator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LOG_OUT_ACTION_TEXT, LOG_OUT_ALERT_DESCRIPTION } from '@/lib/constants'
-import { AuthService } from '@/lib/service'
+import { AuthApi } from '@/lib/api'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound, LogOut, UserCircle } from 'lucide-react'
 import Link from 'next/link'
@@ -36,12 +36,12 @@ export default function Header({ children, searchComponent }: Props) {
     isError: profileIsError,
   } = useQuery({
     queryKey: ['auth', 'me'],
-    queryFn: AuthService.me,
+    queryFn: AuthApi.me,
     retry: false,
   })
 
   const logoutMutation = useMutation({
-    mutationFn: AuthService.logout,
+    mutationFn: AuthApi.logout,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['auth'] })
       toast.success('Logged out')

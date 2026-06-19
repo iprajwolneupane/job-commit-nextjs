@@ -19,8 +19,8 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { SecureInput } from '@/components/ui/secure-input'
+import { AuthApi } from '@/lib/api'
 import { loginSchema, type LoginFormValues } from '@/lib/schema'
-import { AuthService } from '@/lib/service'
 import { handleError } from '@/lib/utils'
 
 type LoginErrorResponse = {
@@ -39,7 +39,7 @@ export default function Login() {
   })
 
   const loginMutation = useMutation({
-    mutationFn: AuthService.login,
+    mutationFn: AuthApi.login,
     onSuccess: () => {
       toast.success('Signed in successfully')
       router.replace('/')

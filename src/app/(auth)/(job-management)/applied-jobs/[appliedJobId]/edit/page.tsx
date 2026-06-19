@@ -37,16 +37,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { AppliedJobApi, PlatformApi } from '@/lib/api'
 import {
   appliedJobResponseValues,
   updateAppliedJobSchema,
 } from '@/lib/schema'
-import { AuthService } from '@/lib/service'
 import { handleError } from '@/lib/utils'
 
 type UpdateAppliedJobFormValues = {
   appliedDate: Date
-  platform: string
+  platformId: string
   company: string
   position: string
   sentMail: boolean
@@ -70,7 +70,7 @@ export default function Page() {
     }) as Resolver<UpdateAppliedJobFormValues>,
     defaultValues: {
       appliedDate: new Date(),
-      platform: '',
+      platformId: '',
       company: '',
       position: '',
       sentMail: false,
@@ -85,8 +85,13 @@ export default function Page() {
     error,
   } = useQuery({
     queryKey: ['applied-job', appliedJobId],
-    queryFn: () => AuthService.getAppliedJob(appliedJobId),
+    queryFn: () => AppliedJobApi.get(appliedJobId),
     enabled: !!appliedJobId,
+  })
+
+  const { data: platformsData, isPending: isPlatformsPending } = useQuery({
+    queryKey: ['platforms'],
+    queryFn: PlatformApi.list,
   })
 
   useEffect(() => {
@@ -94,7 +99,7 @@ export default function Page() {
 
     form.reset({
       appliedDate: new Date(data.appliedJob.appliedDate),
-      platform: data.appliedJob.platform,
+      platformId: data.appliedJob.platformId,
       company: data.appliedJob.company,
       position: data.appliedJob.position,
       sentMail: data.appliedJob.sentMail,
@@ -112,7 +117,7 @@ export default function Page() {
   }, [error])
 
   const updateAppliedJobMutation = useMutation({
-    mutationFn: AuthService.updateAppliedJob,
+    mutationFn: AppliedJobApi.update,
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['applied-jobs'] }),
@@ -222,19 +227,40 @@ export default function Page() {
 
               <FormField
                 control={form.control}
-                name="platform"
+                name="platformId"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Platform</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="text"
-                        placeholder="LinkedIn, Indeed, company site"
-                        className="h-10 bg-background"
-                        disabled={isBusy}
-                        {...field}
-                      />
-                    </FormControl>
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={isBusy || isPlatformsPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="h-10 w-full bg-background">
+                          <SelectValue
+                            placeholder={
+                              isPlatformsPending
+                                ? 'Loading platforms...'
+                                : 'Select platform'
+                            }
+                          />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {(platformsData?.platforms.length ?? 0) === 0 ? (
+                          <SelectItem value="no-platforms" disabled>
+                            Create a platform first
+                          </SelectItem>
+                        ) : (
+                          platformsData?.platforms.map((platform) => (
+                            <SelectItem key={platform.id} value={platform.id}>
+                              {platform.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -360,6 +386,7 @@ function formatResponse(response: (typeof appliedJobResponseValues)[number]) {
   return response
     .toLowerCase()
     .replace('noresponse', 'no response')
+    .replace('screeningquestions', 'screening questions')
     .replace('notinterested', 'not interested')
     .replace(/^\w/, (letter) => letter.toUpperCase())
 }

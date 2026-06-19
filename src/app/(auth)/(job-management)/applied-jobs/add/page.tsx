@@ -1,9 +1,9 @@
 'use client'
 
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AxiosError } from 'axios'
-import { ArrowLeft, Save } from 'lucide-react'
+import { Save } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm, type Resolver } from 'react-hook-form'
@@ -35,16 +35,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
+import { AppliedJobApi, PlatformApi } from '@/lib/api'
 import {
     appliedJobResponseValues,
     createAppliedJobSchema,
 } from '@/lib/schema'
-import { AuthService } from '@/lib/service'
 import { handleError } from '@/lib/utils'
 
 type CreateAppliedJobFormValues = {
     appliedDate: Date
-    platform: string
+    platformId: string
     company: string
     position: string
     response?: (typeof appliedJobResponseValues)[number]
@@ -65,7 +65,7 @@ export default function Page() {
         }) as Resolver<CreateAppliedJobFormValues>,
         defaultValues: {
             appliedDate: new Date(),
-            platform: '',
+            platformId: '',
             company: '',
             position: '',
             response: 'NORESPONSE',
@@ -73,8 +73,13 @@ export default function Page() {
         },
     })
 
+    const { data: platformsData, isPending: isPlatformsPending } = useQuery({
+        queryKey: ['platforms'],
+        queryFn: PlatformApi.list,
+    })
+
     const createAppliedJobMutation = useMutation({
-        mutationFn: AuthService.createAppliedJob,
+        mutationFn: AppliedJobApi.create,
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ['applied-jobs'] })
             toast.success('Applied job added')
@@ -159,18 +164,46 @@ export default function Page() {
 
                             <FormField
                                 control={form.control}
-                                name="platform"
+                                name="platformId"
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Platform</FormLabel>
-                                        <FormControl>
-                                            <Input
-                                                type="text"
-                                                placeholder="LinkedIn, Indeed, company site"
-                                                className="h-10 bg-background"
-                                                {...field}
-                                            />
-                                        </FormControl>
+                                        <Select
+                                            value={field.value}
+                                            onValueChange={field.onChange}
+                                            disabled={
+                                                createAppliedJobMutation.isPending ||
+                                                isPlatformsPending
+                                            }
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger className="h-10 w-full bg-background">
+                                                    <SelectValue
+                                                        placeholder={
+                                                            isPlatformsPending
+                                                                ? 'Loading platforms...'
+                                                                : 'Select platform'
+                                                        }
+                                                    />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {(platformsData?.platforms.length ?? 0) === 0 ? (
+                                                    <SelectItem value="no-platforms" disabled>
+                                                        Create a platform first
+                                                    </SelectItem>
+                                                ) : (
+                                                    platformsData?.platforms.map((platform) => (
+                                                        <SelectItem
+                                                            key={platform.id}
+                                                            value={platform.id}
+                                                        >
+                                                            {platform.name}
+                                                        </SelectItem>
+                                                    ))
+                                                )}
+                                            </SelectContent>
+                                        </Select>
                                         <FormMessage />
                                     </FormItem>
                                 )}
@@ -266,6 +299,7 @@ function formatResponse(response: (typeof appliedJobResponseValues)[number]) {
     return response
         .toLowerCase()
         .replace('noresponse', 'no response')
+        .replace('screeningquestions', 'screening questions')
         .replace('notinterested', 'not interested')
         .replace(/^\w/, (letter) => letter.toUpperCase())
 }

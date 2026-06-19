@@ -22,19 +22,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { AppliedJobApi, type AppliedJob } from '@/lib/api'
 import { appliedJobResponseValues } from '@/lib/schema'
 import { cn, handleError } from '@/lib/utils'
-import { AuthService, type AppliedJob } from '@/lib/service'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { AxiosError } from 'axios'
 import {
   differenceInCalendarDays,
+  endOfMonth,
   format,
   isAfter,
   isBefore,
   startOfDay,
-  subDays,
+  startOfMonth,
 } from 'date-fns'
 import {
   ArrowRight,
@@ -59,9 +60,9 @@ type AppliedJobErrorResponse = {
 
 export default function Page() {
   const [fromDate, setFromDate] = useState<Date>(() =>
-    subDays(startOfDay(new Date()), 7),
+    startOfMonth(new Date()),
   )
-  const [toDate, setToDate] = useState<Date>(() => startOfDay(new Date()))
+  const [toDate, setToDate] = useState<Date>(() => endOfMonth(new Date()))
   const [search, setSearch] = useState('')
   const [responseFilter, setResponseFilter] = useState<
     AppliedJob['response'] | typeof ALL_RESPONSES
@@ -79,11 +80,11 @@ export default function Page() {
 
   const { data, isFetching, isPending, error } = useQuery({
     queryKey: ['applied-jobs', appliedJobsParams],
-    queryFn: () => AuthService.getAppliedJobs(appliedJobsParams),
+    queryFn: () => AppliedJobApi.list(appliedJobsParams),
   })
 
   const deleteAppliedJobMutation = useMutation({
-    mutationFn: AuthService.deleteAppliedJob,
+    mutationFn: AppliedJobApi.delete,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['applied-jobs'] })
       toast.success('Applied job deleted')
@@ -95,7 +96,7 @@ export default function Page() {
 
   const updateSentMailMutation = useMutation({
     mutationFn: (id: string) =>
-      AuthService.updateAppliedJob({
+      AppliedJobApi.update({
         id,
         values: { sentMail: true },
       }),
@@ -120,10 +121,11 @@ export default function Page() {
         cell: ({ row }) => format(new Date(row.original.appliedDate), 'PP'),
       },
       {
-        accessorKey: 'platform',
+        accessorKey: 'platform.name',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Platform" />
         ),
+        cell: ({ row }) => row.original.platform.name,
       },
       {
         accessorKey: 'company',
@@ -160,6 +162,8 @@ export default function Page() {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Mail" />
         ),
+        sortingFn: (rowA, rowB) =>
+          getMailSortValue(rowA.original) - getMailSortValue(rowB.original),
         cell: ({ row }) => {
           if (row.original.sentMail) {
             return (
@@ -372,16 +376,25 @@ function formatResponse(response: AppliedJob['response']) {
   return response
     .toLowerCase()
     .replace('noresponse', 'no response')
+    .replace('screeningquestions', 'screening questions')
     .replace('notinterested', 'not interested')
     .replace(/^\w/, (letter) => letter.toUpperCase())
 }
 
 function formatFollowUpDiff(sendMailAt: string) {
-  const days = differenceInCalendarDays(new Date(), new Date(sendMailAt))
+  const days = differenceInCalendarDays(new Date(sendMailAt), new Date())
 
   if (days === 0) return 'Today'
 
   return `${days} ${Math.abs(days) === 1 ? 'day' : 'days'}`
+}
+
+function getMailSortValue(job: AppliedJob) {
+  if (job.sentMail) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  return differenceInCalendarDays(new Date(job.sendMailAt), new Date())
 }
 
 function getResponseClassName(response: AppliedJob['response']) {
@@ -390,6 +403,8 @@ function getResponseClassName(response: AppliedJob['response']) {
       return 'border-destructive/30 bg-destructive/10 text-destructive'
     case 'INTERVIEW':
       return 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300'
+    case 'SCREENINGQUESTIONS':
+      return 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300'
     case 'OFFER':
     case 'ACCEPTED':
       return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
