@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import * as z from 'zod'
+import { ScrapeStatus } from '@/generated/prisma/enums'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { updateAppliedJobSchema } from '@/lib/schema'
@@ -114,6 +115,7 @@ export async function PUT(
     },
     select: {
       id: true,
+      link: true,
       sentMail: true,
     },
   })
@@ -145,13 +147,36 @@ export async function PUT(
       ? { sendMailAt: getSendMailAt(result.data.appliedDate) }
       : {}),
   }
+  const linkChanged =
+    typeof result.data.link === 'string' &&
+    result.data.link !== existingAppliedJob.link
 
-  const appliedJob = await prisma.appliedJob.update({
-    where: {
-      id: existingAppliedJob.id,
-    },
-    data: updateData,
-    select: appliedJobSelect,
+  const appliedJob = await prisma.$transaction(async (tx) => {
+    const updatedAppliedJob = await tx.appliedJob.update({
+      where: {
+        id: existingAppliedJob.id,
+      },
+      data: updateData,
+      select: appliedJobSelect,
+    })
+
+    if (linkChanged) {
+      await tx.scrappedJob.deleteMany({
+        where: {
+          appliedJobId: existingAppliedJob.id,
+        },
+      })
+
+      await tx.scrappedJob.create({
+        data: {
+          appliedJobId: existingAppliedJob.id,
+          link: result.data.link!,
+          scrapeStatus: ScrapeStatus.PENDING,
+        },
+      })
+    }
+
+    return updatedAppliedJob
   })
 
   return NextResponse.json({ appliedJob })

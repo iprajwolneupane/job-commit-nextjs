@@ -22,6 +22,14 @@ enum AppliedJobResponseEnum {
   NOTINTERESTED
 }
 
+enum ScrapeStatus {
+  PENDING
+  SCRAPING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
 model Session {
   id           String   @id @default(cuid())
   userId       String   @unique
@@ -74,12 +82,34 @@ model AppliedJob {
   link        String
   user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform    Platform               @relation(fields: [platformId], references: [id], onDelete: Restrict)
+  scrappedJob ScrappedJob?
 
   @@index([userId])
   @@index([userId, platformId])
   @@index([userId, appliedDate])
   @@index([userId, response])
   @@index([userId, sendMailAt])
+}
+
+model ScrappedJob {
+  id                  String       @id @default(cuid())
+  appliedJobId        String       @unique
+  link                String
+  title               String?
+  company             String?
+  description         String?      @db.Text
+  scrapeStatus        ScrapeStatus @default(PENDING)
+  scrapedLink         String?
+  scrapedAt           DateTime?
+  scrapeAttempts      Int          @default(0)
+  scrapeError         String?
+  lastScrapeAttemptAt DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  appliedJob          AppliedJob   @relation(fields: [appliedJobId], references: [id], onDelete: Cascade)
+
+  @@index([scrapeStatus])
+  @@index([scrapedAt])
 }
 
 model Document {
