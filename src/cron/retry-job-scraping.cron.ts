@@ -1,11 +1,16 @@
 import 'dotenv/config'
-import { ScrapeStatus } from '@/generated/prisma/enums'
-import { prisma } from '@/lib/prisma'
-import { scrapeJobReportFromLink } from '@/lib/service'
 import cron from 'node-cron'
+import { ScrapeStatus } from '@/generated/prisma/enums'
+import {
+  closeScrapeJobQueue,
+  enqueueScrapeJob,
+} from '@/lib/queues/scrape-job.queue'
+import { prisma } from '@/lib/prisma'
+import { closeRedisConnection } from '@/lib/redis'
 
 const RETRY_PLATFORMS = ['LinkedIn']
 const MAX_SCRAPE_ATTEMPTS = 3
+const JOBS_PER_RUN = 10
 
 let isRunning = false
 
@@ -18,7 +23,7 @@ async function retryJobScraping() {
   isRunning = true
   const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
 
-  console.log('Starting job scraping retry...')
+  console.log('Starting job scraping retry enqueue...')
 
   try {
     const jobsToRetry = await prisma.appliedJob.findMany({
@@ -28,110 +33,66 @@ async function retryJobScraping() {
             in: RETRY_PLATFORMS,
           },
         },
-        scrappedJob: {
-          is: {
-            scrapeStatus: {
-              in: [ScrapeStatus.PENDING, ScrapeStatus.FAILED],
+        OR: [
+          {
+            scrappedJob: {
+              is: null,
             },
-            scrapeAttempts: {
-              lt: MAX_SCRAPE_ATTEMPTS,
-            },
-            OR: [
-              {
-                lastScrapeAttemptAt: null,
-              },
-              {
-                lastScrapeAttemptAt: {
-                  lt: tenMinutesAgo,
-                },
-              },
-            ],
           },
-        },
+          {
+            scrappedJob: {
+              is: {
+                scrapeAttempts: {
+                  lt: MAX_SCRAPE_ATTEMPTS,
+                },
+                OR: [
+                  {
+                    scrapeStatus: {
+                      in: [ScrapeStatus.PENDING, ScrapeStatus.FAILED],
+                    },
+                    OR: [
+                      {
+                        lastScrapeAttemptAt: null,
+                      },
+                      {
+                        lastScrapeAttemptAt: {
+                          lt: tenMinutesAgo,
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    scrapeStatus: ScrapeStatus.SCRAPING,
+                    lastScrapeAttemptAt: {
+                      lt: tenMinutesAgo,
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
       },
-      take: 10,
+      take: JOBS_PER_RUN,
       orderBy: {
         appliedDate: 'asc',
       },
+      select: {
+        id: true,
+      },
     })
 
-    console.log(`Found ${jobsToRetry.length} jobs to retry.`)
+    console.log(`Found ${jobsToRetry.length} jobs to enqueue.`)
 
     for (const job of jobsToRetry) {
-      try {
-        console.log(`Scraping job: ${job.id}`)
-
-        await prisma.scrappedJob.update({
-          where: {
-            appliedJobId: job.id,
-          },
-          data: {
-            scrapeStatus: ScrapeStatus.SCRAPING,
-            lastScrapeAttemptAt: new Date(),
-          },
-        })
-
-        const scraped = await scrapeJobReportFromLink(job.link)
-
-        if (scraped) {
-          await prisma.scrappedJob.update({
-            where: {
-              appliedJobId: job.id,
-            },
-            data: {
-              scrapeStatus: ScrapeStatus.COMPLETED,
-              scrapedLink: scraped.link,
-              scrapedAt: new Date(),
-              scrapeError: null,
-              scrapeAttempts: {
-                increment: 1,
-              },
-              description: scraped.description,
-              company: job.company,
-              title: scraped.title,
-            },
-          })
-        } else {
-          await prisma.scrappedJob.update({
-            where: {
-              appliedJobId: job.id,
-            },
-            data: {
-              scrapeStatus: ScrapeStatus.FAILED,
-              scrapeError: 'Got no scraped data',
-              scrapeAttempts: {
-                increment: 1,
-              },
-              lastScrapeAttemptAt: new Date(),
-            },
-          })
-        }
-
-        console.log(`Scraping completed for job: ${job.id}`)
-      } catch (error) {
-        console.error(`Scraping failed for job: ${job.id}`, error)
-
-        await prisma.scrappedJob.update({
-          where: {
-            appliedJobId: job.id,
-          },
-          data: {
-            scrapeStatus: ScrapeStatus.FAILED,
-            scrapeError:
-              error instanceof Error ? error.message : 'Unknown scrape error',
-            scrapeAttempts: {
-              increment: 1,
-            },
-            lastScrapeAttemptAt: new Date(),
-          },
-        })
-      }
+      await enqueueScrapeJob(job.id)
+      console.log(`Enqueued scrape job: ${job.id}`)
     }
   } catch (error) {
     console.error('Cron job failed:', error)
   } finally {
     isRunning = false
-    console.log('10-minute job scraping retry finished.')
+    console.log('10-minute job scraping enqueue finished.')
   }
 }
 
@@ -139,6 +100,22 @@ cron.schedule('*/10 * * * *', async () => {
   await retryJobScraping()
 })
 
-console.log('Job scraping cron started. Runs every 10 minutes.')
+async function shutdown() {
+  console.log('Closing scraping retry cron...')
+  await closeScrapeJobQueue()
+  await closeRedisConnection()
+  await prisma.$disconnect()
+  process.exit(0)
+}
+
+process.on('SIGINT', () => {
+  void shutdown()
+})
+
+process.on('SIGTERM', () => {
+  void shutdown()
+})
+
+console.log('Job scraping retry cron started. Runs every 10 minutes.')
 
 void retryJobScraping()

@@ -8,7 +8,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm, type Resolver } from 'react-hook-form'
 import { toast } from 'sonner'
+import ErrorComponent from '@/components/shared/error'
 import Header from '@/components/shared/header'
+import Loading from '@/components/shared/loading'
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -73,7 +75,12 @@ export default function Page() {
         },
     })
 
-    const { data: platformsData, isPending: isPlatformsPending } = useQuery({
+    const {
+        data: platformsData,
+        error: platformsError,
+        isError: isPlatformsError,
+        isPending: isPlatformsPending,
+    } = useQuery({
         queryKey: ['platforms'],
         queryFn: PlatformApi.list,
     })
@@ -95,30 +102,46 @@ export default function Page() {
         createAppliedJobMutation.mutate(createAppliedJobSchema.parse(values))
     }
 
+    const pageHeader = (
+        <Header>
+            <Breadcrumb>
+                <BreadcrumbList>
+                    <BreadcrumbItem className="hidden md:block">
+                        <BreadcrumbLink asChild>
+                            <Link href="/">Home</Link>
+                        </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator className="hidden md:block" />
+                    <BreadcrumbItem>
+                        <BreadcrumbLink asChild>
+                            <Link href="/applied-jobs">Applied Jobs</Link>
+                        </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator className="hidden md:block" />
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>Add</BreadcrumbPage>
+                    </BreadcrumbItem>
+                </BreadcrumbList>
+            </Breadcrumb>
+        </Header>
+    )
+
+    if (isPlatformsError) {
+        return (
+            <>
+                {pageHeader}
+                <ErrorComponent error={platformsError} />
+            </>
+        )
+    }
+
     return (
         <>
-            <Header>
-                <Breadcrumb>
-                    <BreadcrumbList>
-                        <BreadcrumbItem className="hidden md:block">
-                            <BreadcrumbLink asChild>
-                                <Link href="/">Home</Link>
-                            </BreadcrumbLink>
-                        </BreadcrumbItem>
-                        <BreadcrumbSeparator className="hidden md:block" />
-                        <BreadcrumbItem>
-                            <BreadcrumbLink asChild>
-                                <Link href="/applied-jobs">Applied Jobs</Link>
-                            </BreadcrumbLink>
-                        </BreadcrumbItem>
-                        <BreadcrumbSeparator className="hidden md:block" />
-                        <BreadcrumbItem>
-                            <BreadcrumbPage>Add</BreadcrumbPage>
-                        </BreadcrumbItem>
-                    </BreadcrumbList>
-                </Breadcrumb>
-            </Header>
-            <div className="flex flex-col gap-6 rounded-lg border border-sidebar-border bg-card m-5 p-4 text-card-foreground shadow-sm">
+            {pageHeader}
+            {isPlatformsPending ? (
+                <Loading />
+            ) : (
+                <div className="flex flex-col gap-6 rounded-lg border border-sidebar-border bg-card m-5 p-4 text-card-foreground shadow-sm">
                 <h1 className="text-2xl font-semibold text-foreground">
                     Add applied job
                 </h1>
@@ -290,7 +313,8 @@ export default function Page() {
                         </div>
                     </form>
                 </Form>
-            </div>
+                </div>
+            )}
         </>
     )
 }

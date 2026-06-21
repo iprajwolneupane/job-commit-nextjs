@@ -1,22 +1,10 @@
-import bcrypt from 'bcrypt'
-import jwt from 'jsonwebtoken'
-import { prisma } from '@/lib/prisma'
-import { signupSchema } from '@/lib/schema'
 import { NextResponse } from 'next/server'
 import * as z from 'zod'
-import { AUTH_COOKIE_NAME, BCRYPT_SALT_ROUNDS, SESSION_DURATION_SECONDS } from '@/lib/constants'
-
+import { AUTH_COOKIE_NAME, SESSION_DURATION_SECONDS } from '@/lib/constants'
+import { signupSchema } from '@/lib/schema'
+import { AuthServiceError, registerUser } from '../service'
 
 export async function POST(request: Request) {
-  const jwtSecret = process.env.JWT_SECRET
-
-  if (!jwtSecret) {
-    return NextResponse.json(
-      { message: 'JWT_SECRET is not configured' },
-      { status: 500 },
-    )
-  }
-
   let body: unknown
 
   try {
@@ -37,59 +25,8 @@ export async function POST(request: Request) {
     )
   }
 
-  const { username, email, password } = result.data
-  const normalizedEmail = email.toLowerCase()
-  const existingUser = await prisma.user.findUnique({
-    where: { email: normalizedEmail },
-    select: { id: true },
-  })
-
-  if (existingUser) {
-    return NextResponse.json(
-      { message: 'Email is already registered' },
-      { status: 409 },
-    )
-  }
-
-  const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS)
-  const expiresAt = new Date(Date.now() + SESSION_DURATION_SECONDS * 1000)
-
   try {
-    const { token } = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          username,
-          email: normalizedEmail,
-          passwordHash,
-        },
-        select: {
-          id: true,
-          username: true,
-          email: true,
-        },
-      })
-
-      const token = jwt.sign(
-        {
-          sub: user.id,
-          email: user.email,
-          username: user.username,
-        },
-        jwtSecret,
-        { expiresIn: `${SESSION_DURATION_SECONDS}s` },
-      )
-
-      await tx.session.create({
-        data: {
-          userId: user.id,
-          sessionToken: token,
-          expiresAt,
-        },
-      })
-
-      return { token }
-    })
-
+    const token = await registerUser(result.data)
     const response = NextResponse.json(
       { message: 'Account created' },
       { status: 201 },
@@ -107,15 +44,10 @@ export async function POST(request: Request) {
 
     return response
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'P2002'
-    ) {
+    if (error instanceof AuthServiceError) {
       return NextResponse.json(
-        { message: 'Email is already registered' },
-        { status: 409 },
+        { message: error.message },
+        { status: error.status },
       )
     }
 

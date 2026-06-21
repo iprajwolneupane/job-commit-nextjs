@@ -7,6 +7,21 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/next_app_db?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - redis
+      - postgres
+  worker:
+    build: .
+    command: pnpm run worker:scrape
+    restart: always
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/next_app_db?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     depends_on:
       - redis
       - postgres

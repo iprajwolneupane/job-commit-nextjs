@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "cron:scrape": "tsx -r tsconfig-paths/register src/cron/retry-job-scraping.cron.ts"
+    "cron:scrape": "tsx -r tsconfig-paths/register src/cron/retry-job-scraping.cron.ts",
+    "worker:scrape": "tsx -r tsconfig-paths/register src/workers/scrape-job.worker.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

@@ -1,21 +1,13 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 import * as z from 'zod'
-import { getCurrentUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { withAuth } from '@/lib/auth'
 import { platformSchema } from '@/lib/schema'
-
-const platformSelect = {
-  id: true,
-  userId: true,
-  name: true,
-  createdAt: true,
-  updatedAt: true,
-  _count: {
-    select: {
-      appliedJobs: true,
-    },
-  },
-} as const
+import {
+  PlatformServiceError,
+  deletePlatform,
+  getPlatform,
+  updatePlatform,
+} from '../service'
 
 type PlatformRouteContext = {
   params: Promise<{
@@ -23,162 +15,81 @@ type PlatformRouteContext = {
   }>
 }
 
-function jsonError(message: string, status: number) {
-  return NextResponse.json({ message }, { status })
-}
+export const GET = withAuth<PlatformRouteContext>(
+  async (_request, context, user) => {
+    const { platformId } = await context.params
+    const platform = await getPlatform(platformId, user.id)
 
-async function readJson(request: NextRequest) {
-  try {
-    return await request.json()
-  } catch {
-    return null
-  }
-}
+    if (!platform) {
+      return NextResponse.json({ message: 'Platform not found' }, { status: 404 })
+    }
 
-async function platformNameExists(userId: string, name: string, id: string) {
-  const normalizedName = name.trim().toLowerCase()
-  const platforms = await prisma.platform.findMany({
-    where: {
-      userId,
-      NOT: {
-        id,
-      },
-    },
-    select: {
-      name: true,
-    },
-  })
+    return NextResponse.json({ platform })
+  },
+)
 
-  return platforms.some(
-    (platform) => platform.name.trim().toLowerCase() === normalizedName,
-  )
-}
+export const PUT = withAuth<PlatformRouteContext>(
+  async (request, context, user) => {
+    let body: unknown
 
-export async function GET(
-  request: NextRequest,
-  context: PlatformRouteContext,
-) {
-  const user = await getCurrentUser(request)
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 })
+    }
 
-  if (!user) {
-    return jsonError('Unauthorized', 401)
-  }
+    const result = platformSchema.safeParse(body)
 
-  const { platformId } = await context.params
-  const platform = await prisma.platform.findFirst({
-    where: {
-      id: platformId,
-      userId: user.id,
-    },
-    select: platformSelect,
-  })
-
-  if (!platform) {
-    return jsonError('Platform not found', 404)
-  }
-
-  return NextResponse.json({ platform })
-}
-
-export async function PUT(
-  request: NextRequest,
-  context: PlatformRouteContext,
-) {
-  const user = await getCurrentUser(request)
-
-  if (!user) {
-    return jsonError('Unauthorized', 401)
-  }
-
-  const body = await readJson(request)
-
-  if (!body) {
-    return jsonError('Invalid JSON body', 400)
-  }
-
-  const result = platformSchema.safeParse(body)
-
-  if (!result.success) {
-    return NextResponse.json(
-      {
-        message: 'Invalid platform details',
-        errors: z.flattenError(result.error).fieldErrors,
-      },
-      { status: 400 },
-    )
-  }
-
-  const { platformId } = await context.params
-  const existingPlatform = await prisma.platform.findFirst({
-    where: {
-      id: platformId,
-      userId: user.id,
-    },
-    select: {
-      id: true,
-    },
-  })
-
-  if (!existingPlatform) {
-    return jsonError('Platform not found', 404)
-  }
-
-  if (await platformNameExists(user.id, result.data.name, platformId)) {
-    return jsonError('Platform already exists', 409)
-  }
-
-  const platform = await prisma.platform.update({
-    where: {
-      id: existingPlatform.id,
-    },
-    data: {
-      name: result.data.name,
-    },
-    select: platformSelect,
-  })
-
-  return NextResponse.json({ platform })
-}
-
-export async function DELETE(
-  request: NextRequest,
-  context: PlatformRouteContext,
-) {
-  const user = await getCurrentUser(request)
-
-  if (!user) {
-    return jsonError('Unauthorized', 401)
-  }
-
-  const { platformId } = await context.params
-  const platform = await prisma.platform.findFirst({
-    where: {
-      id: platformId,
-      userId: user.id,
-    },
-    select: {
-      id: true,
-      _count: {
-        select: {
-          appliedJobs: true,
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          message: 'Invalid platform details',
+          errors: z.flattenError(result.error).fieldErrors,
         },
-      },
-    },
-  })
+        { status: 400 },
+      )
+    }
 
-  if (!platform) {
-    return jsonError('Platform not found', 404)
-  }
+    const { platformId } = await context.params
 
-  if (platform._count.appliedJobs > 0) {
-    return jsonError('Platform is used by applied jobs', 409)
-  }
+    try {
+      const platform = await updatePlatform({
+        platformId,
+        userId: user.id,
+        values: result.data,
+      })
 
-  await prisma.platform.delete({
-    where: {
-      id: platform.id,
-    },
-  })
+      return NextResponse.json({ platform })
+    } catch (error) {
+      if (error instanceof PlatformServiceError) {
+        return NextResponse.json(
+          { message: error.message },
+          { status: error.status },
+        )
+      }
 
-  return NextResponse.json({ message: 'Platform deleted' })
-}
+      throw error
+    }
+  },
+)
+
+export const DELETE = withAuth<PlatformRouteContext>(
+  async (_request, context, user) => {
+    const { platformId } = await context.params
+
+    try {
+      await deletePlatform(platformId, user.id)
+
+      return NextResponse.json({ message: 'Platform deleted' })
+    } catch (error) {
+      if (error instanceof PlatformServiceError) {
+        return NextResponse.json(
+          { message: error.message },
+          { status: error.status },
+        )
+      }
+
+      throw error
+    }
+  },
+)

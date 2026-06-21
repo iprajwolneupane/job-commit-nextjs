@@ -103,6 +103,12 @@ export default function Header({ children, searchComponent }: Props) {
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem asChild>
+                  <Link href="/profile">
+                    <UserCircle aria-hidden="true" className="size-4" />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
                   <Link href="/change-password">
                     <KeyRound aria-hidden="true" className="size-4" />
                     Change Password

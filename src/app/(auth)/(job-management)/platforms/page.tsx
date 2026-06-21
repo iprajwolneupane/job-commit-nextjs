@@ -6,12 +6,14 @@ import type { ColumnDef } from '@tanstack/react-table'
 import type { AxiosError } from 'axios'
 import { Pencil, Plus, Save, Trash2, X } from 'lucide-react'
 import Link from 'next/link'
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { DataTable } from '@/components/shared/data-table'
 import { DataTableColumnHeader } from '@/components/shared/data-table/data-table-column-header'
+import ErrorComponent from '@/components/shared/error'
 import Header from '@/components/shared/header'
+import Loading from '@/components/shared/loading'
 import AlertDialog from '@/components/ui/alert-dialog'
 import {
   Breadcrumb,
@@ -50,16 +52,10 @@ export default function Page() {
     },
   })
 
-  const { data, isFetching, isPending, error } = useQuery({
+  const { data, error, isError, isFetching, isPending } = useQuery({
     queryKey: ['platforms'],
     queryFn: PlatformApi.list,
   })
-
-  useEffect(() => {
-    if (!error) return
-
-    handleError<PlatformErrorResponse>(error as AxiosError<PlatformErrorResponse>)
-  }, [error])
 
   const createPlatformMutation = useMutation({
     mutationFn: PlatformApi.create,
@@ -198,84 +194,99 @@ export default function Page() {
     [deletePlatformMutation],
   )
 
+  const pageHeader = (
+    <Header>
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem className="hidden md:block">
+            <BreadcrumbLink asChild>
+              <Link href="/">Home</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator className="hidden md:block" />
+          <BreadcrumbItem>
+            <BreadcrumbPage>Platforms</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+    </Header>
+  )
+
+  if (isError) {
+    return (
+      <>
+        {pageHeader}
+        <ErrorComponent error={error} />
+      </>
+    )
+  }
+
   return (
     <>
-      <Header>
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem className="hidden md:block">
-              <BreadcrumbLink asChild>
-                <Link href="/">Home</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Platforms</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-      </Header>
+      {pageHeader}
 
-      <div className="m-5 flex flex-col gap-6 rounded-lg border border-sidebar-border bg-card p-4 text-card-foreground shadow-sm">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-medium">
-            ({platforms.length}) Platforms
-          </h1>
-        </div>
+      {isPending ? (
+        <Loading />
+      ) : (
+        <div className="m-5 flex flex-col gap-6 rounded-lg border border-sidebar-border bg-card p-4 text-card-foreground shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-xl font-medium">
+              ({platforms.length}) Platforms
+            </h1>
+          </div>
 
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="grid gap-3 rounded-lg border bg-background p-4 md:grid-cols-[1fr_auto]"
-          >
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Platform name</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="LinkedIn"
-                      className="h-10 bg-card"
-                      disabled={isSaving}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="grid gap-3 rounded-lg border bg-background p-4 md:grid-cols-[1fr_auto]"
+            >
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Platform name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="LinkedIn"
+                        className="h-10 bg-card"
+                        disabled={isSaving}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <div className="flex items-end gap-2">
-              {editingPlatform ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={cancelEditing}
-                  disabled={isSaving}
-                >
-                  <X />
-                  Cancel
+              <div className="flex items-end gap-2">
+                {editingPlatform ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={cancelEditing}
+                    disabled={isSaving}
+                  >
+                    <X />
+                    Cancel
+                  </Button>
+                ) : null}
+                <Button type="submit" isLoading={isSaving}>
+                  {editingPlatform ? <Save /> : <Plus />}
+                  {editingPlatform ? 'Save platform' : 'Add platform'}
                 </Button>
-              ) : null}
-              <Button type="submit" isLoading={isSaving}>
-                {editingPlatform ? <Save /> : <Plus />}
-                {editingPlatform ? 'Save platform' : 'Add platform'}
-              </Button>
-            </div>
-          </form>
-        </Form>
+              </div>
+            </form>
+          </Form>
 
-        <Suspense fallback={<div className="rounded-md border p-4">Loading...</div>}>
           <DataTable<Platform, unknown>
             columns={columns}
             data={platforms}
             totalEntries={platforms.length}
-            isFetching={isFetching || isPending}
+            isFetching={isFetching}
           />
-        </Suspense>
-      </div>
+        </div>
+      )}
     </>
   )
 }

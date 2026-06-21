@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import * as z from 'zod'
 import { withAuth } from '@/lib/auth'
-import { getJobReportSchema } from '@/lib/schema'
-import { JobServiceError, getJobReport } from '../service'
+import { profileSchema } from '@/lib/schema'
+import { AuthServiceError, updateProfile } from '../service'
 
-export const POST = withAuth(async (request) => {
+export const PUT = withAuth(async (request, _context, user) => {
   let body: unknown
 
   try {
@@ -13,12 +13,12 @@ export const POST = withAuth(async (request) => {
     return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const result = getJobReportSchema.safeParse(body)
+  const result = profileSchema.safeParse(body)
 
   if (!result.success) {
     return NextResponse.json(
       {
-        message: 'Invalid job link',
+        message: 'Invalid profile details',
         errors: z.flattenError(result.error).fieldErrors,
       },
       { status: 400 },
@@ -26,14 +26,14 @@ export const POST = withAuth(async (request) => {
   }
 
   try {
-    const job = await getJobReport(result.data.link)
+    const profile = await updateProfile(user.id, result.data)
 
     return NextResponse.json({
-      message: 'Job report generated',
-      job,
+      message: 'Profile updated',
+      profile,
     })
   } catch (error) {
-    if (error instanceof JobServiceError) {
+    if (error instanceof AuthServiceError) {
       return NextResponse.json(
         { message: error.message },
         { status: error.status },

@@ -2,7 +2,9 @@
 
 import { DataTable } from '@/components/shared/data-table'
 import { DataTableColumnHeader } from '@/components/shared/data-table/data-table-column-header'
+import ErrorComponent from '@/components/shared/error'
 import Header from '@/components/shared/header'
+import Loading from '@/components/shared/loading'
 import AlertDialog from '@/components/ui/alert-dialog'
 import {
   Breadcrumb,
@@ -14,6 +16,14 @@ import {
 } from '@/components/ui/breadcrumb'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import SearchInput from '@/components/ui/search-input'
 import {
   Select,
@@ -34,21 +44,24 @@ import {
   format,
   isAfter,
   isBefore,
-  startOfDay,
-  startOfMonth,
+  startOfMonth
 } from 'date-fns'
 import {
   ArrowRight,
+  Check,
+  Copy,
   ExternalLink,
   Mail,
   MailCheck,
   Pencil,
   Plus,
-  Trash2,
+  Sparkles,
+  Trash2
 } from 'lucide-react'
 import Link from 'next/link'
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+
 
 const DATE_PARAM_FORMAT = 'yyyy-MM-dd'
 const ALL_RESPONSES = 'ALL'
@@ -56,6 +69,38 @@ const ALL_RESPONSES = 'ALL'
 type AppliedJobErrorResponse = {
   message?: string
   errors?: Record<string, Array<string> | undefined>
+}
+
+type CopySection = 'subject' | 'description'
+
+async function getGenerateErrorMessage(response: Response) {
+  try {
+    const data = (await response.json()) as { message?: string }
+
+    return data.message ?? 'Unable to generate email content'
+  } catch {
+    return 'Unable to generate email content'
+  }
+}
+
+function parseGeneratedEmail(value: string) {
+  const normalizedValue = value.replace(/^```(?:\w+)?\s*/, '').replace(/```\s*$/, '')
+  const subjectMatch = normalizedValue.match(/^Subject:\s*(.*)(?:\r?\n|$)/i)
+
+  if (!subjectMatch) {
+    return {
+      subject: '',
+      description: normalizedValue.trimStart(),
+    }
+  }
+
+  return {
+    subject: subjectMatch[1]?.trim() ?? '',
+    description: normalizedValue
+      .slice(subjectMatch[0].length)
+      .replace(/^\s+/, '')
+      .trimEnd(),
+  }
 }
 
 export default function Page() {
@@ -67,6 +112,15 @@ export default function Page() {
   const [responseFilter, setResponseFilter] = useState<
     AppliedJob['response'] | typeof ALL_RESPONSES
   >(ALL_RESPONSES)
+  const [selectedAppliedJob, setSelectedAppliedJob] =
+    useState<AppliedJob | null>(null)
+  const [generatedEmail, setGeneratedEmail] = useState('')
+  const [generationError, setGenerationError] = useState<string | null>(null)
+  const [generatingAppliedJobId, setGeneratingAppliedJobId] = useState<
+    string | null
+  >(null)
+  const [copiedSection, setCopiedSection] = useState<CopySection | null>(null)
+  const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false)
   const queryClient = useQueryClient()
   const appliedJobsParams = useMemo(
     () => ({
@@ -78,7 +132,7 @@ export default function Page() {
     [fromDate, responseFilter, search, toDate],
   )
 
-  const { data, isFetching, isPending, error } = useQuery({
+  const { data, error, isLoading, isRefetching, isError } = useQuery({
     queryKey: ['applied-jobs', appliedJobsParams],
     queryFn: () => AppliedJobApi.list(appliedJobsParams),
   })
@@ -110,6 +164,84 @@ export default function Page() {
   })
 
   const appliedJobs = data?.appliedJobs ?? []
+  const generatedEmailParts = useMemo(
+    () => parseGeneratedEmail(generatedEmail),
+    [generatedEmail],
+  )
+
+  const handleGenerateMail = useCallback(async (job: AppliedJob) => {
+    setSelectedAppliedJob(job)
+    setGeneratedEmail('')
+    setGenerationError(null)
+    setCopiedSection(null)
+    setIsGenerateDialogOpen(true)
+    setGeneratingAppliedJobId(job.id)
+
+    try {
+      const response = await AppliedJobApi.generate(job.id)
+
+      if (!response.ok) {
+        throw new Error(await getGenerateErrorMessage(response))
+      }
+
+      if (!response.body) {
+        throw new Error('Generated email stream is unavailable')
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done) break
+
+        setGeneratedEmail((current) =>
+          current + decoder.decode(value, { stream: true }),
+        )
+      }
+
+      const remainingText = decoder.decode()
+
+      if (remainingText) {
+        setGeneratedEmail((current) => current + remainingText)
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to generate email content'
+
+      setGenerationError(message)
+      toast.error(message)
+    } finally {
+      setGeneratingAppliedJobId(null)
+    }
+  }, [])
+
+  const handleCopy = useCallback(
+    async (section: CopySection, value: string) => {
+      const trimmedValue = value.trim()
+
+      if (!trimmedValue) return
+
+      try {
+        await navigator.clipboard.writeText(trimmedValue)
+        setCopiedSection(section)
+        toast.success(
+          section === 'subject' ? 'Subject copied' : 'Description copied',
+        )
+        window.setTimeout(() => {
+          setCopiedSection((currentSection) =>
+            currentSection === section ? null : currentSection,
+          )
+        }, 1500)
+      } catch {
+        toast.error('Could not copy text')
+      }
+    },
+    [],
+  )
 
   const columns: ColumnDef<AppliedJob>[] = useMemo(
     () => [
@@ -226,8 +358,38 @@ export default function Page() {
           <DataTableColumnHeader column={column} title="Actions" />
         ),
         enableSorting: false,
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1">
+        cell: ({ row }) => {
+          const isGeneratingThisJob =
+            generatingAppliedJobId === row.original.id
+
+          return (
+            <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              disabled={
+                !row.original.hasEmailData || generatingAppliedJobId !== null
+              }
+              isLoading={isGeneratingThisJob}
+              variant="outline"
+              size="sm"
+              className={cn(
+                'relative h-8 overflow-hidden rounded-full border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary),transparent_82%)] hover:border-primary/50 hover:bg-primary/15 hover:text-primary',
+                'before:absolute before:inset-y-0 before:left-[-40%] before:w-1/3 before:skew-x-[-20deg] before:bg-white/35 before:opacity-0 before:transition-all before:duration-500 hover:before:left-[120%] hover:before:opacity-100',
+                'disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:before:hidden',
+              )}
+              onClick={() => handleGenerateMail(row.original)}
+              aria-label={`Generate follow-up mail for ${row.original.position}`}
+              title={
+                row.original.hasEmailData
+                  ? 'Generate follow-up mail'
+                  : 'Scraped job data is required before generating mail'
+              }
+            >
+              <span className="relative flex items-center gap-1.5">
+                <Sparkles className="size-3.5" />
+                Generate Mail
+              </span>
+            </Button>
             <Link
               href={`/applied-jobs/${row.original.id}/edit`}
               className={cn(
@@ -254,21 +416,45 @@ export default function Page() {
                 className="rounded-full hover:bg-destructive/10 hover:text-destructive"
                 aria-label={`Delete ${row.original.position}`}
               >
-                <Trash2 className="text-destructive" />
+              <Trash2 className="text-destructive" />
               </Button>
             </AlertDialog>
           </div>
-        ),
+          )
+        },
       },
     ],
-    [deleteAppliedJobMutation, updateSentMailMutation],
+    [
+      deleteAppliedJobMutation,
+      generatingAppliedJobId,
+      handleGenerateMail,
+      updateSentMailMutation,
+    ],
   )
 
-  useEffect(() => {
-    if (!error) return
+  if (isError) {
+    return (
+      <>
+        <Header>
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem className="hidden md:block">
+                <BreadcrumbLink asChild>
+                  <Link href="/">Home</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator className="hidden md:block" />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Applied Jobs</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        </Header>
+        <ErrorComponent error={error} />
+      </>
+    )
+  }
 
-    handleError<AppliedJobErrorResponse>(error as AxiosError<AppliedJobErrorResponse>)
-  }, [error])
 
   return (
     <>
@@ -287,87 +473,193 @@ export default function Page() {
           </BreadcrumbList>
         </Breadcrumb>
       </Header>
-      <div className="flex flex-col m-5 p-4 mb-4 rounded-lg border border-sidebar-border bg-card text-card-foreground shadow-sm">
-        <div className='flex w-full justify-between items-center'>
-          <h1 className="text-xl font-medium">({appliedJobs.length}) Applied Jobs</h1>
-          <Button asChild>
-            <Link href="/applied-jobs/add">
-              <Plus />
-              Add applied job
-            </Link>
-          </Button>
-        </div>
-        <Suspense fallback={<div className="rounded-md border p-4">Loading...</div>}>
-          <DataTable<AppliedJob, unknown>
-            columns={columns}
-            data={appliedJobs}
-            totalEntries={appliedJobs.length}
-            isFetching={isFetching || isPending}
-            showPagination={false}
-          >
-            <div className="flex w-full justify-between items-center">
-              <SearchInput
-                placeholder="Search company or position"
-                value={search}
-                onValueChange={setSearch}
-                debounce
-                className="w-full sm:w-72"
-              />
-              <div className='flex items-center gap-4'>
-                <div className='flex items-center gap-2'>
-                  <div className='w-40'>
-                    <DatePicker
-                      selected={fromDate}
-                      onSelect={(date: Date | undefined) => {
-                        if (!date) return
-                        setFromDate(date)
-                        if (isAfter(date, toDate)) {
-                          setToDate(date)
-                        }
-                      }}
-                      disabled={toDate ? { after: toDate } : undefined}
-                      placeholder="From date"
-                    />
-                  </div>
-                  <ArrowRight className="size-4 text-muted-foreground" />
-                  <div className='w-40'>
-                    <DatePicker
-                      selected={toDate}
-                      onSelect={(date: Date | undefined) => {
-                        if (!date) return
-                        setToDate(date)
-                        if (isBefore(date, fromDate)) {
+      {
+        isLoading ? <Loading /> :
+          <div className="flex flex-col m-5 p-4 mb-4 rounded-lg border border-sidebar-border bg-card text-card-foreground shadow-sm">
+            <div className='flex w-full justify-between items-center'>
+              <h1 className="text-xl font-medium">({appliedJobs.length}) Applied Jobs</h1>
+              <Button asChild>
+                <Link href="/applied-jobs/add">
+                  <Plus />
+                  Add applied job
+                </Link>
+              </Button>
+            </div>
+            <DataTable<AppliedJob, unknown>
+              columns={columns}
+              data={appliedJobs}
+              totalEntries={appliedJobs.length}
+              isFetching={isRefetching}
+              showPagination={false}
+            >
+              <div className="flex w-full justify-between items-center">
+                <SearchInput
+                  placeholder="Search company or position"
+                  value={search}
+                  onValueChange={setSearch}
+                  debounce
+                  className="w-full sm:w-72"
+                />
+                <div className='flex items-center gap-4'>
+                  <div className='flex items-center gap-2'>
+                    <div className='w-40'>
+                      <DatePicker
+                        selected={fromDate}
+                        onSelect={(date: Date | undefined) => {
+                          if (!date) return
                           setFromDate(date)
-                        }
-                      }}
-                      disabled={fromDate ? { before: fromDate } : undefined}
-                      placeholder="To date"
-                    />
+                          if (isAfter(date, toDate)) {
+                            setToDate(date)
+                          }
+                        }}
+                        disabled={toDate ? { after: toDate } : undefined}
+                        placeholder="From date"
+                      />
+                    </div>
+                    <ArrowRight className="size-4 text-muted-foreground" />
+                    <div className='w-40'>
+                      <DatePicker
+                        selected={toDate}
+                        onSelect={(date: Date | undefined) => {
+                          if (!date) return
+                          setToDate(date)
+                          if (isBefore(date, fromDate)) {
+                            setFromDate(date)
+                          }
+                        }}
+                        disabled={fromDate ? { before: fromDate } : undefined}
+                        placeholder="To date"
+                      />
+                    </div>
+                  </div>
+                  <Select
+                    value={responseFilter}
+                    onValueChange={(value) =>
+                      setResponseFilter(value as AppliedJob['response'] | typeof ALL_RESPONSES)
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-full bg-background sm:w-30">
+                      <SelectValue placeholder="All responses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_RESPONSES}>All</SelectItem>
+                      {appliedJobResponseValues.map((response) => (
+                        <SelectItem key={response} value={response}>
+                          {formatResponse(response)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </DataTable>
+          </div>
+      }
+      <Dialog
+        open={isGenerateDialogOpen}
+        onOpenChange={setIsGenerateDialogOpen}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Generated follow-up email</DialogTitle>
+            <DialogDescription>
+              {selectedAppliedJob
+                ? `${selectedAppliedJob.position} at ${selectedAppliedJob.company}`
+                : 'Email content'}
+            </DialogDescription>
+          </DialogHeader>
+          <div
+            className="space-y-4"
+            aria-live="polite"
+          >
+            {generationError ? (
+              <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm leading-6 text-destructive">
+                {generationError}
+              </p>
+            ) : (
+              <>
+                <div className="overflow-hidden rounded-lg border bg-background">
+                  <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Subject
+                    </h3>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 rounded-full px-2 text-xs"
+                      disabled={!generatedEmailParts.subject}
+                      onClick={() =>
+                        handleCopy('subject', generatedEmailParts.subject)
+                      }
+                    >
+                      {copiedSection === 'subject' ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        <Copy className="size-3.5" />
+                      )}
+                      Copy
+                    </Button>
+                  </div>
+                  <p className="min-h-12 px-4 py-3 text-sm leading-6 text-foreground">
+                    {generatedEmailParts.subject ||
+                      (generatingAppliedJobId
+                        ? 'Generating subject...'
+                        : 'No subject generated.')}
+                  </p>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border bg-background">
+                  <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Description
+                    </h3>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 rounded-full px-2 text-xs"
+                      disabled={!generatedEmailParts.description}
+                      onClick={() =>
+                        handleCopy(
+                          'description',
+                          generatedEmailParts.description,
+                        )
+                      }
+                    >
+                      {copiedSection === 'description' ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        <Copy className="size-3.5" />
+                      )}
+                      Copy
+                    </Button>
+                  </div>
+                  <div className="max-h-[45vh] min-h-40 overflow-y-auto px-4 py-3">
+                    {generatedEmailParts.description ? (
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">
+                        {generatedEmailParts.description}
+                      </p>
+                    ) : (
+                      <div className="flex h-32 items-center justify-center gap-2 text-sm text-muted-foreground">
+                        {generatingAppliedJobId ? (
+                          <>
+                            <Sparkles className="size-4 animate-pulse text-primary" />
+                            Generating description...
+                          </>
+                        ) : (
+                          'No description generated.'
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <Select
-                  value={responseFilter}
-                  onValueChange={(value) =>
-                    setResponseFilter(value as AppliedJob['response'] | typeof ALL_RESPONSES)
-                  }
-                >
-                  <SelectTrigger className="h-8 w-full bg-background sm:w-30">
-                    <SelectValue placeholder="All responses" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL_RESPONSES}>All</SelectItem>
-                    {appliedJobResponseValues.map((response) => (
-                      <SelectItem key={response} value={response}>
-                        {formatResponse(response)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </DataTable>
-        </Suspense>
-      </div>
+              </>
+            )}
+          </div>
+          <DialogFooter showCloseButton />
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

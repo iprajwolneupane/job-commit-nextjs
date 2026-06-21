@@ -9,7 +9,9 @@ import { useParams, useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { toast } from 'sonner'
+import ErrorComponent from '@/components/shared/error'
 import Header from '@/components/shared/header'
+import Loading from '@/components/shared/loading'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -81,15 +83,21 @@ export default function Page() {
 
   const {
     data,
-    isPending: isAppliedJobPending,
     error,
+    isError,
+    isPending: isAppliedJobPending,
   } = useQuery({
     queryKey: ['applied-job', appliedJobId],
     queryFn: () => AppliedJobApi.get(appliedJobId),
     enabled: !!appliedJobId,
   })
 
-  const { data: platformsData, isPending: isPlatformsPending } = useQuery({
+  const {
+    data: platformsData,
+    error: platformsError,
+    isError: isPlatformsError,
+    isPending: isPlatformsPending,
+  } = useQuery({
     queryKey: ['platforms'],
     queryFn: PlatformApi.list,
   })
@@ -107,14 +115,6 @@ export default function Page() {
       link: data.appliedJob.link,
     })
   }, [data, form])
-
-  useEffect(() => {
-    if (!error) return
-
-    handleError<AppliedJobErrorResponse>(
-      error as AxiosError<AppliedJobErrorResponse>,
-    )
-  }, [error])
 
   const updateAppliedJobMutation = useMutation({
     mutationFn: AppliedJobApi.update,
@@ -153,231 +153,248 @@ export default function Page() {
       ? new Date(data.appliedJob.sendMailAt)
       : undefined
 
+  const pageHeader = (
+    <Header>
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem className="hidden md:block">
+            <BreadcrumbLink asChild>
+              <Link href="/">Home</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator className="hidden md:block" />
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/applied-jobs">Applied Jobs</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator className="hidden md:block" />
+          <BreadcrumbItem>
+            <BreadcrumbPage>Edit</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+    </Header>
+  )
+
+  if (isError || isPlatformsError) {
+    return (
+      <>
+        {pageHeader}
+        <ErrorComponent error={error ?? platformsError} />
+      </>
+    )
+  }
+
   return (
     <>
-      <Header>
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem className="hidden md:block">
-              <BreadcrumbLink asChild>
-                <Link href="/">Home</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/applied-jobs">Applied Jobs</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Edit</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-      </Header>
+      {pageHeader}
 
-      <div className="m-5 flex flex-col gap-6 rounded-lg border border-sidebar-border bg-card p-4 text-card-foreground shadow-sm">
-        <h1 className="text-2xl font-semibold text-foreground">
-          Edit applied job
-        </h1>
+      {isAppliedJobPending || isPlatformsPending ? (
+        <Loading />
+      ) : (
+        <div className="m-5 flex flex-col gap-6 rounded-lg border border-sidebar-border bg-card p-4 text-card-foreground shadow-sm">
+          <h1 className="text-2xl font-semibold text-foreground">
+            Edit applied job
+          </h1>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="company"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Company</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="text"
-                        placeholder="Company name"
-                        className="h-10 bg-background"
-                        disabled={isBusy}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="position"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Position</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="text"
-                        placeholder="Frontend Developer"
-                        className="h-10 bg-background"
-                        disabled={isBusy}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="platformId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Platform</FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      disabled={isBusy || isPlatformsPending}
-                    >
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="company"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company</FormLabel>
                       <FormControl>
-                        <SelectTrigger className="h-10 w-full bg-background">
-                          <SelectValue
-                            placeholder={
-                              isPlatformsPending
-                                ? 'Loading platforms...'
-                                : 'Select platform'
-                            }
-                          />
-                        </SelectTrigger>
+                        <Input
+                          type="text"
+                          placeholder="Company name"
+                          className="h-10 bg-background"
+                          disabled={isBusy}
+                          {...field}
+                        />
                       </FormControl>
-                      <SelectContent>
-                        {(platformsData?.platforms.length ?? 0) === 0 ? (
-                          <SelectItem value="no-platforms" disabled>
-                            Create a platform first
-                          </SelectItem>
-                        ) : (
-                          platformsData?.platforms.map((platform) => (
-                            <SelectItem key={platform.id} value={platform.id}>
-                              {platform.name}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="position"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Position</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="text"
+                          placeholder="Frontend Developer"
+                          className="h-10 bg-background"
+                          disabled={isBusy}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="platformId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Platform</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        disabled={isBusy || isPlatformsPending}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="h-10 w-full bg-background">
+                            <SelectValue
+                              placeholder={
+                                isPlatformsPending
+                                  ? 'Loading platforms...'
+                                  : 'Select platform'
+                              }
+                            />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {(platformsData?.platforms.length ?? 0) === 0 ? (
+                            <SelectItem value="no-platforms" disabled>
+                              Create a platform first
                             </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                          ) : (
+                            platformsData?.platforms.map((platform) => (
+                              <SelectItem key={platform.id} value={platform.id}>
+                                {platform.name}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="link"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Job link</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="url"
-                        placeholder="https://example.com/job"
-                        className="h-10 bg-background"
+                <FormField
+                  control={form.control}
+                  name="link"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Job link</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="url"
+                          placeholder="https://example.com/job"
+                          className="h-10 bg-background"
+                          disabled={isBusy}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="appliedDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Applied date</FormLabel>
+                      <FormControl>
+                        <DatePicker
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          isPending={isBusy}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Follow-up mail date</label>
+                  <Input
+                    readOnly
+                    className="h-10 bg-muted"
+                    value={sendMailAt ? sendMailAt.toLocaleDateString() : ''}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="response"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Response</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
                         disabled={isBusy}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      >
+                        <FormControl>
+                          <SelectTrigger className="h-10 w-full bg-background">
+                            <SelectValue placeholder="Select response" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {appliedJobResponseValues.map((response) => (
+                            <SelectItem key={response} value={response}>
+                              {formatResponse(response)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="appliedDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Applied date</FormLabel>
-                    <FormControl>
-                      <DatePicker
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        isPending={isBusy}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Follow-up mail date</label>
-                <Input
-                  readOnly
-                  className="h-10 bg-muted"
-                  value={sendMailAt ? sendMailAt.toLocaleDateString() : ''}
+                <FormField
+                  control={form.control}
+                  name="sentMail"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Mail status</FormLabel>
+                      <FormControl>
+                        <label className="flex h-10 items-center gap-3 rounded-md border bg-background px-3 text-sm">
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={(checked) =>
+                              field.onChange(checked === true)
+                            }
+                            disabled={isBusy}
+                          />
+                          Sent follow-up mail
+                        </label>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
 
-              <FormField
-                control={form.control}
-                name="response"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Response</FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      disabled={isBusy}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="h-10 w-full bg-background">
-                          <SelectValue placeholder="Select response" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {appliedJobResponseValues.map((response) => (
-                          <SelectItem key={response} value={response}>
-                            {formatResponse(response)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="sentMail"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Mail status</FormLabel>
-                    <FormControl>
-                      <label className="flex h-10 items-center gap-3 rounded-md border bg-background px-3 text-sm">
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={(checked) =>
-                            field.onChange(checked === true)
-                          }
-                          disabled={isBusy}
-                        />
-                        Sent follow-up mail
-                      </label>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:justify-end">
-              <Button type="button" variant="outline" asChild>
-                <Link href="/applied-jobs">Cancel</Link>
-              </Button>
-              <Button type="submit" isLoading={updateAppliedJobMutation.isPending}>
-                <Save />
-                Save changes
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </div>
+              <div className="flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:justify-end">
+                <Button type="button" variant="outline" asChild>
+                  <Link href="/applied-jobs">Cancel</Link>
+                </Button>
+                <Button type="submit" isLoading={updateAppliedJobMutation.isPending}>
+                  <Save />
+                  Save changes
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </div>
+      )}
     </>
   )
 }

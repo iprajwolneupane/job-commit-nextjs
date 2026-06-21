@@ -1,146 +1,25 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 import * as z from 'zod'
+import { withAuth } from '@/lib/auth'
+import { createAppliedJobSchema } from '@/lib/schema'
 import {
-  endOfDay,
-  endOfMonth,
-  isValid,
-  parseISO,
-  startOfDay,
-  startOfMonth,
-} from 'date-fns'
-import { AppliedJobResponseEnum } from '@/generated/prisma/enums'
-import { getCurrentUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { appliedJobResponseValues, createAppliedJobSchema } from '@/lib/schema'
+  AppliedJobServiceError,
+  createAppliedJob,
+  listAppliedJobs,
+} from './service'
 
-const appliedJobSelect = {
-  id: true,
-  userId: true,
-  platformId: true,
-  appliedDate: true,
-  platform: {
-    select: {
-      id: true,
-      name: true,
-    },
-  },
-  company: true,
-  position: true,
-  sendMailAt: true,
-  sentMail: true,
-  response: true,
-  link: true,
-} as const
-
-function getSendMailAt(appliedDate: Date) {
-  return new Date(appliedDate.getTime() + 3 * 24 * 60 * 60 * 1000)
-}
-
-async function userOwnsPlatform(userId: string, platformId: string) {
-  const platform = await prisma.platform.findFirst({
-    where: {
-      id: platformId,
-      userId,
-    },
-    select: {
-      id: true,
-    },
+export const GET = withAuth(async (request, _context, user) => {
+  const appliedJobs = await listAppliedJobs(user.id, {
+    fromDate: request.nextUrl.searchParams.get('fromDate'),
+    toDate: request.nextUrl.searchParams.get('toDate'),
+    query: request.nextUrl.searchParams.get('query'),
+    response: request.nextUrl.searchParams.get('response'),
   })
 
-  return Boolean(platform)
-}
+  return NextResponse.json({ appliedJobs })
+})
 
-function parseDateFilter(value: string | null, boundary: 'start' | 'end') {
-  if (!value) return undefined
-
-  const parsed = parseISO(value)
-
-  if (!isValid(parsed)) return undefined
-
-  return boundary === 'start' ? startOfDay(parsed) : endOfDay(parsed)
-}
-
-function getAppliedDateFilter(fromDate?: Date, toDate?: Date) {
-  if (fromDate || toDate) {
-    return {
-      ...(fromDate ? { gte: fromDate } : {}),
-      ...(toDate ? { lte: toDate } : {}),
-    }
-  }
-
-  const now = new Date()
-
-  return {
-    gte: startOfMonth(now),
-    lte: endOfMonth(now),
-  }
-}
-
-function sanitizeSearch(value: string | null) {
-  return (value ?? '').toLowerCase().replace(/\s+/g, '')
-}
-
-function isAppliedJobResponse(
-  value: string | null,
-): value is (typeof appliedJobResponseValues)[number] {
-  return appliedJobResponseValues.includes(
-    value as (typeof appliedJobResponseValues)[number],
-  )
-}
-
-export async function GET(request: NextRequest) {
-  const user = await getCurrentUser(request)
-
-  if (!user) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-  }
-
-  const fromDate = parseDateFilter(
-    request.nextUrl.searchParams.get('fromDate'),
-    'start',
-  )
-  const toDate = parseDateFilter(
-    request.nextUrl.searchParams.get('toDate'),
-    'end',
-  )
-  const query = sanitizeSearch(request.nextUrl.searchParams.get('query'))
-  const responseParam = request.nextUrl.searchParams.get('response')
-  const response = isAppliedJobResponse(responseParam)
-    ? responseParam
-    : undefined
-  const appliedDateFilter = getAppliedDateFilter(fromDate, toDate)
-
-  const appliedJobs = await prisma.appliedJob.findMany({
-    where: {
-      userId: user.id,
-      ...(response ? { response } : {}),
-      appliedDate: appliedDateFilter,
-    },
-    orderBy: {
-      appliedDate: 'desc',
-    },
-    select: appliedJobSelect,
-  })
-
-  const filteredAppliedJobs = query
-    ? appliedJobs.filter((job) => {
-        const company = sanitizeSearch(job.company)
-        const position = sanitizeSearch(job.position)
-
-        return company.includes(query) || position.includes(query)
-      })
-    : appliedJobs
-
-  return NextResponse.json({ appliedJobs: filteredAppliedJobs })
-}
-
-export async function POST(request: NextRequest) {
-  const user = await getCurrentUser(request)
-
-  if (!user) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-  }
-
+export const POST = withAuth(async (request, _context, user) => {
   let body: unknown
 
   try {
@@ -161,23 +40,18 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  if (!(await userOwnsPlatform(user.id, result.data.platformId))) {
-    return NextResponse.json({ message: 'Platform not found' }, { status: 404 })
+  try {
+    const appliedJob = await createAppliedJob(user.id, result.data)
+
+    return NextResponse.json({ appliedJob }, { status: 201 })
+  } catch (error) {
+    if (error instanceof AppliedJobServiceError) {
+      return NextResponse.json(
+        { message: error.message },
+        { status: error.status },
+      )
+    }
+
+    throw error
   }
-
-  const appliedJob = await prisma.appliedJob.create({
-    data: {
-      userId: user.id,
-      appliedDate: result.data.appliedDate,
-      platformId: result.data.platformId,
-      company: result.data.company,
-      position: result.data.position,
-      sendMailAt: getSendMailAt(result.data.appliedDate),
-      response: result.data.response ?? AppliedJobResponseEnum.NORESPONSE,
-      link: result.data.link,
-    },
-    select: appliedJobSelect,
-  })
-
-  return NextResponse.json({ appliedJob }, { status: 201 })
-}
+})

@@ -44,6 +44,35 @@ export const signupSchema = z
 
 export type SignupFormValues = z.infer<typeof signupSchema>
 
+const optionalUrlSchema = z
+  .string()
+  .trim()
+  .refine((value) => !value || z.url().safeParse(value).success, {
+    message: 'Invalid URL',
+  })
+
+export const profileSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(1, 'Please provide a username')
+    .max(20, 'Username must be at most 20 characters'),
+  email: z
+    .string()
+    .trim()
+    .min(1, 'Please provide an email')
+    .email('Invalid email address'),
+  linkedInUrl: optionalUrlSchema,
+  githubUrl: optionalUrlSchema,
+  portfolioUrl: optionalUrlSchema,
+  contactNumber: z
+    .string()
+    .trim()
+    .max(30, 'Contact number must be at most 30 characters'),
+})
+
+export type ProfileValues = z.infer<typeof profileSchema>
+
 export const appliedJobResponseValues = [
   'NORESPONSE',
   'REJECTED',
@@ -58,13 +87,19 @@ export const platformSchema = z.object({
   name: z.string().trim().min(1, 'Platform name is required'),
 })
 
+const appliedJobLinkSchema = z
+  .string()
+  .trim()
+  .min(1, 'Link is required')
+  .url('Invalid URL')
+
 export const createAppliedJobSchema = z.object({
   appliedDate: z.coerce.date(),
   platformId: z.string().trim().min(1, 'Platform is required'),
   company: z.string().trim().min(1, 'Company is required'),
   position: z.string().trim().min(1, 'Position is required'),
   response: z.enum(appliedJobResponseValues).optional(),
-  link: z.string().trim().min(1, 'Link is required'),
+  link: appliedJobLinkSchema,
 })
 
 export const updateAppliedJobSchema = z
@@ -75,7 +110,7 @@ export const updateAppliedJobSchema = z
     position: z.string().trim().min(1, 'Position is required').optional(),
     sentMail: z.boolean().optional(),
     response: z.enum(appliedJobResponseValues).optional(),
-    link: z.string().trim().min(1, 'Link is required').optional(),
+    link: appliedJobLinkSchema.optional(),
   })
   .refine((values) => Object.values(values).some((value) => value !== undefined), {
     message: 'At least one field is required',
