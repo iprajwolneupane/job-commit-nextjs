@@ -17,7 +17,6 @@ export const GET = withAuth<AppliedJobGenerateRouteContext>(
   async (_request, context, user) => {
     const { appliedJobId } = await context.params
     const appliedJob = await getAppliedJobForGeneration(appliedJobId, user.id)
-
     if (!appliedJob) {
       return NextResponse.json(
         { message: 'Applied job not found' },
@@ -38,7 +37,6 @@ export const GET = withAuth<AppliedJobGenerateRouteContext>(
         { status: 409 },
       )
     }
-
     try {
       return new Response(buildFollowUpEmailStream(appliedJob, user), {
         headers: {

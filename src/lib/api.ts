@@ -191,8 +191,8 @@ export const AppliedJobApi = {
 
     return response.data
   },
-  async generate(id: string) {
-    const response = await fetch(`/api/applied-job/${id}/generate`)
+  async generate(id: string, init?: RequestInit) {
+    const response = await fetch(`/api/applied-job/${id}/generate`, init)
 
     if (response.status === 401) {
       await handleUnauthorizedResponse()

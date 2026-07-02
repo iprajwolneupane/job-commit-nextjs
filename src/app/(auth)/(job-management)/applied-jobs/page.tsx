@@ -65,6 +65,7 @@ import { toast } from 'sonner'
 
 const DATE_PARAM_FORMAT = 'yyyy-MM-dd'
 const ALL_RESPONSES = 'ALL'
+const GENERATE_MAIL_TIMEOUT_MS = 105000
 
 type AppliedJobErrorResponse = {
   message?: string
@@ -170,6 +171,12 @@ export default function Page() {
   )
 
   const handleGenerateMail = useCallback(async (job: AppliedJob) => {
+    const abortController = new AbortController()
+    let hasReceivedContent = false
+    const timeoutId = window.setTimeout(() => {
+      abortController.abort()
+    }, GENERATE_MAIL_TIMEOUT_MS)
+
     setSelectedAppliedJob(job)
     setGeneratedEmail('')
     setGenerationError(null)
@@ -178,7 +185,9 @@ export default function Page() {
     setGeneratingAppliedJobId(job.id)
 
     try {
-      const response = await AppliedJobApi.generate(job.id)
+      const response = await AppliedJobApi.generate(job.id, {
+        signal: abortController.signal,
+      })
 
       if (!response.ok) {
         throw new Error(await getGenerateErrorMessage(response))
@@ -196,6 +205,7 @@ export default function Page() {
 
         if (done) break
 
+        hasReceivedContent = true
         setGeneratedEmail((current) =>
           current + decoder.decode(value, { stream: true }),
         )
@@ -204,17 +214,24 @@ export default function Page() {
       const remainingText = decoder.decode()
 
       if (remainingText) {
+        hasReceivedContent = true
         setGeneratedEmail((current) => current + remainingText)
       }
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : 'Unable to generate email content'
+        abortController.signal.aborted ||
+        (error instanceof DOMException && error.name === 'AbortError')
+          ? 'Email generation timed out. Please try again in a moment.'
+          : error instanceof TypeError && !hasReceivedContent
+            ? 'NVIDIA did not start streaming a response in time. Please try again in a moment.'
+          : error instanceof Error
+            ? error.message
+            : 'Unable to generate email content'
 
       setGenerationError(message)
       toast.error(message)
     } finally {
+      window.clearTimeout(timeoutId)
       setGeneratingAppliedJobId(null)
     }
   }, [])

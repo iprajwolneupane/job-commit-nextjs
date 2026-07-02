@@ -9,7 +9,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .                                                                                                             
 
-ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/build_db"
+ARG DATABASE_URL="postgresql://postgres:postgres@localhost:5432/build_db?schema=public"
+ENV DATABASE_URL=$DATABASE_URL
+
 RUN pnpm build                                                                                                       
 
 EXPOSE 3000  

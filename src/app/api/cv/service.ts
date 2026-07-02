@@ -3,6 +3,7 @@ import path from 'node:path'
 import { inflateRawSync, inflateSync } from 'node:zlib'
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 import axios from 'axios'
+import { PDFParse } from 'pdf-parse'
 import { prisma } from '@/lib/prisma'
 
 const CV_UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploaded-cv')
@@ -139,6 +140,7 @@ function decodePdfTextToken(token: string) {
 
 function normalizeExtractedText(value: string) {
   return value
+    .replace(/[\uE000-\uF8FF]/g, '')
     .replace(/&apos;/g, "'")
     .replace(/&quot;/g, '"')
     .replace(/&amp;/g, '&')
@@ -150,6 +152,17 @@ function normalizeExtractedText(value: string) {
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+function isUsableExtractedText(value: string) {
+  const visibleText = value.replace(/\s/g, '')
+  const readableCharacters = value.match(/[\p{L}\p{N}]/gu) ?? []
+
+  if (readableCharacters.length < 20 || visibleText.length === 0) {
+    return false
+  }
+
+  return readableCharacters.length / visibleText.length >= 0.45
 }
 
 function getPdfTextSources(fileBuffer: Buffer) {
@@ -239,7 +252,7 @@ function extractPdfMetadataText(source: string) {
   return textParts
 }
 
-function extractTextFromPdf(fileBuffer: Buffer) {
+function extractTextFromPdfFallback(fileBuffer: Buffer) {
   const rawPdf = fileBuffer.toString('latin1')
   const text = [
     ...getPdfTextSources(fileBuffer).flatMap(extractTextOperations),
@@ -248,6 +261,33 @@ function extractTextFromPdf(fileBuffer: Buffer) {
   ].join('\n')
 
   return normalizeExtractedText(text)
+}
+
+async function extractTextFromPdf(fileBuffer: Buffer) {
+  let parser: PDFParse | undefined
+
+  try {
+    parser = new PDFParse({ data: fileBuffer })
+
+    const result = await parser.getText()
+    const parsedText = normalizeExtractedText(result.text)
+
+    if (isUsableExtractedText(parsedText)) {
+      return parsedText
+    }
+  } catch {
+    // Fall back to the lightweight extractor below for PDFs pdf-parse cannot read.
+  } finally {
+    await parser?.destroy()
+  }
+
+  const fallbackText = extractTextFromPdfFallback(fileBuffer)
+
+  if (isUsableExtractedText(fallbackText)) {
+    return fallbackText
+  }
+
+  return ''
 }
 
 function extractNameFromCvText(text: string) {
@@ -490,7 +530,7 @@ export async function uploadCvForUser(userId: string, file: File) {
 
   const filename = getUserCvFilename(userId)
   const cvUrl = getUserCvUrl(userId)
-  const text = extractTextFromPdf(fileBuffer)
+  const text = await extractTextFromPdf(fileBuffer)
 
   if (!text) {
     throw new CvServiceError('No text could be extracted from this PDF', 422)
@@ -545,7 +585,7 @@ export async function refillProfileFromStoredCv(userId: string) {
     throw new CvServiceError('Stored CV is not a valid PDF file', 422)
   }
 
-  const text = extractTextFromPdf(fileBuffer)
+  const text = await extractTextFromPdf(fileBuffer)
 
   if (!text) {
     throw new CvServiceError('No text could be extracted from this PDF', 422)

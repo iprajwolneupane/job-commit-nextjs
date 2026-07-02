@@ -7,8 +7,8 @@ import {
 } from '@/lib/queues/scrape-job.queue'
 import { prisma } from '@/lib/prisma'
 import { closeRedisConnection } from '@/lib/redis'
+import { SUPPORTED_SCRAPE_PLATFORMS } from '@/lib/service'
 
-const RETRY_PLATFORMS = ['LinkedIn']
 const MAX_SCRAPE_ATTEMPTS = 3
 const JOBS_PER_RUN = 10
 
@@ -30,7 +30,7 @@ async function retryJobScraping() {
       where: {
         platform: {
           name: {
-            in: RETRY_PLATFORMS,
+            in: [...SUPPORTED_SCRAPE_PLATFORMS],
           },
         },
         OR: [
@@ -48,7 +48,7 @@ async function retryJobScraping() {
                 OR: [
                   {
                     scrapeStatus: {
-                      in: [ScrapeStatus.PENDING, ScrapeStatus.FAILED],
+                      in: [ScrapeStatus.PENDING, ScrapeStatus.FAILED, ScrapeStatus.SKIPPED],
                     },
                     OR: [
                       {

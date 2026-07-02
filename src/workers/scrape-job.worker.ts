@@ -3,9 +3,12 @@ import { Worker, type ConnectionOptions } from 'bullmq'
 import { ScrapeStatus } from '@/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { closeRedisConnection, getRedisConnection } from '@/lib/redis'
-import { scrapeJobReportFromLink } from '@/lib/service'
+import {
+  isSupportedScrapePlatform,
+  scrapeJobReportFromLink,
+  UNSUPPORTED_JOB_LINK_ERROR,
+} from '@/lib/service'
 
-const LINKEDIN_PLATFORM_NAME = 'LinkedIn'
 const SCRAPE_JOB_QUEUE_NAME = 'scrape-job'
 const WORKER_CONCURRENCY = 3
 
@@ -58,7 +61,7 @@ const worker = new Worker<ScrapeJobPayload>(
       return
     }
 
-    if (appliedJob.platform.name !== LINKEDIN_PLATFORM_NAME) {
+    if (!isSupportedScrapePlatform(appliedJob.platform.name)) {
       await prisma.scrappedJob.upsert({
         where: {
           appliedJobId: appliedJob.id,
@@ -67,16 +70,16 @@ const worker = new Worker<ScrapeJobPayload>(
           appliedJobId: appliedJob.id,
           link: appliedJob.link,
           scrapeStatus: ScrapeStatus.SKIPPED,
-          scrapeError: 'Only LinkedIn job links are supported for now',
+          scrapeError: UNSUPPORTED_JOB_LINK_ERROR,
         },
         update: {
           link: appliedJob.link,
           scrapeStatus: ScrapeStatus.SKIPPED,
-          scrapeError: 'Only LinkedIn job links are supported for now',
+          scrapeError: UNSUPPORTED_JOB_LINK_ERROR,
         },
       })
 
-      console.log(`Skipped non-LinkedIn scrape job ${jobId}.`)
+      console.log(`Skipped unsupported platform scrape job ${jobId}.`)
       return
     }
 

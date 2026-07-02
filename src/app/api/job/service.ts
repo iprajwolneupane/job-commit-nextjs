@@ -1,4 +1,7 @@
-import { scrapeJobReportFromLink } from '@/lib/service'
+import {
+  scrapeJobReportFromLink,
+  UNSUPPORTED_JOB_LINK_ERROR,
+} from '@/lib/service'
 
 export class JobServiceError extends Error {
   constructor(
@@ -15,8 +18,9 @@ function getScrapeErrorStatus(error: unknown) {
   }
 
   if (
-    error.message === 'Only LinkedIn job links are supported for now' ||
-    error.message === 'Could not find LinkedIn job id from this link'
+    error.message === UNSUPPORTED_JOB_LINK_ERROR ||
+    error.message === 'Could not find LinkedIn job id from this link' ||
+    error.message === 'Could not find Reed job id from this link'
   ) {
     return 400
   }
