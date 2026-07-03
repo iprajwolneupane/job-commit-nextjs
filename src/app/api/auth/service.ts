@@ -116,6 +116,7 @@ export async function registerUser(values: SignupFormValues) {
           username: values.username,
           email: normalizedEmail,
           passwordHash,
+          skills: [],
         },
         select: {
           id: true,
@@ -170,6 +171,7 @@ export async function updateProfile(userId: string, values: ProfileValues) {
         githubUrl: emptyToNull(values.githubUrl),
         portfolioUrl: emptyToNull(values.portfolioUrl),
         contactNumber: emptyToNull(values.contactNumber),
+        skills: values.skills,
       },
       select: {
         id: true,
@@ -180,6 +182,7 @@ export async function updateProfile(userId: string, values: ProfileValues) {
         githubUrl: true,
         portfolioUrl: true,
         contactNumber: true,
+        skills: true,
       },
     })
   } catch (error) {

@@ -1,3 +1,5 @@
+import { REDIS_DATA_VERSION } from '@/lib/constants'
+import { getRedisConnection } from '@/lib/redis'
 import axios from 'axios'
 
 const LINKEDIN_DOMAIN_REGEX = /(^|\.)linkedin\.com$/i
@@ -268,7 +270,7 @@ async function scrapeLinkedInJobPosting(jobId: string, link: string) {
 }
 
 export async function scrapeJobReportFromLink(link: string) {
-  const { platform, jobId } = getScrapeJobLink(link)
+  const { platform, jobId } = getScrapeJobLink(link);
 
   if (!platform) {
     throw new Error(UNSUPPORTED_JOB_LINK_ERROR)
@@ -278,9 +280,28 @@ export async function scrapeJobReportFromLink(link: string) {
     throw new Error(`Could not find ${platform} job id from this link`)
   }
 
-  if (platform === 'Reed') {
-    return fetchReedJobPosting(jobId)
+  const redis = getRedisConnection();
+  const cacheKey = `scraped-job-report:${REDIS_DATA_VERSION}:${link}`;
+  const cachedJobReport = await redis.get(cacheKey);
+
+  if (cachedJobReport) {
+    return JSON.parse(cachedJobReport) as ScrapedJobReport
   }
 
-  return scrapeLinkedInJobPosting(jobId, link)
+  const jobReport =
+    platform === 'Reed'
+      ? await fetchReedJobPosting(jobId)
+      : await scrapeLinkedInJobPosting(jobId, link);
+
+  if (jobReport) {
+    await redis.set(
+      cacheKey,
+      JSON.stringify(jobReport),
+      'EX',
+      60 * 60 * 12,
+    )
+  }
+
+
+  return jobReport;
 }

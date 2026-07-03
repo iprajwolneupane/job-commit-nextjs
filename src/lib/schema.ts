@@ -51,6 +51,30 @@ const optionalUrlSchema = z
     message: 'Invalid URL',
   })
 
+const skillsSchema = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1, 'Skill cannot be empty')
+      .max(50, 'Skill must be at most 50 characters'),
+  )
+  .max(30, 'You can add up to 30 skills')
+  .transform((skills) => {
+    const seenSkills = new Set<string>()
+
+    return skills.filter((skill) => {
+      const key = skill.toLowerCase()
+
+      if (seenSkills.has(key)) {
+        return false
+      }
+
+      seenSkills.add(key)
+      return true
+    })
+  })
+
 export const profileSchema = z.object({
   username: z
     .string()
@@ -69,6 +93,7 @@ export const profileSchema = z.object({
     .string()
     .trim()
     .max(30, 'Contact number must be at most 30 characters'),
+  skills: skillsSchema,
 })
 
 export type ProfileValues = z.infer<typeof profileSchema>

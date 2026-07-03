@@ -4,7 +4,7 @@ import { withAuth } from '@/lib/auth'
 import { getJobReportSchema } from '@/lib/schema'
 import { JobServiceError, getJobReport } from '../service'
 
-export const POST = withAuth(async (request) => {
+export const POST = withAuth(async (request, _context, user) => {
   let body: unknown
 
   try {
@@ -26,11 +26,12 @@ export const POST = withAuth(async (request) => {
   }
 
   try {
-    const job = await getJobReport(result.data.link)
+    const report = await getJobReport(result.data.link, user)
 
     return NextResponse.json({
       message: 'Job report generated',
-      job,
+      report: report.skillMatch,
+      title: report.title,
     })
   } catch (error) {
     if (error instanceof JobServiceError) {

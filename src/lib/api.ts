@@ -76,6 +76,7 @@ export type AuthProfile = {
   githubUrl: string | null
   portfolioUrl: string | null
   contactNumber: string | null
+  skills: string[]
 }
 
 export type Platform = {
@@ -118,6 +119,14 @@ export type UploadedCv = {
   size: number | null
   updatedAt: string | null
   documentCount: number
+}
+
+export type SkillMatchReport = {
+  rating: 0 | 1 | 2 | 3 | 4 | 5
+  summary: string
+  matchedSkills: string[]
+  missingSkills: string[]
+  tips: string[]
 }
 
 export const AuthApi = {
@@ -241,7 +250,11 @@ export const PlatformApi = {
 
 export const JobReportApi = {
   async get(values: GetJobReportValues) {
-    const response = await apiClient.post<{ message: string }>(
+    const response = await apiClient.post<{
+      message: string
+      report: SkillMatchReport
+      title: string
+    }>(
       '/api/job/report',
       values,
     )

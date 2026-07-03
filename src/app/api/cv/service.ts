@@ -28,7 +28,51 @@ type ExtractedCvProfile = {
   githubUrl?: string
   portfolioUrl?: string
   contactNumber?: string
+  skills?: string[]
 }
+
+const CV_SKILL_PATTERNS = [
+  { label: 'React.js', pattern: /\breact(?:\.js|js)?\b/i },
+  { label: 'Next.js', pattern: /\bnext(?:\.js|js)?\b/i },
+  { label: 'TypeScript', pattern: /\btypescript\b/i },
+  { label: 'JavaScript', pattern: /\bjavascript\b/i },
+  { label: 'Tailwind CSS', pattern: /\btailwind(?:\s+css)?\b/i },
+  { label: 'HTML', pattern: /\bhtml5?\b/i },
+  { label: 'CSS', pattern: /\bcss3?\b/i },
+  { label: 'Node.js', pattern: /\bnode(?:\.js|js)?\b/i },
+  { label: 'Express.js', pattern: /\bexpress(?:\.js|js)?\b/i },
+  { label: 'NestJS', pattern: /\bnest(?:js|\.js)?\b/i },
+  { label: 'Vue.js', pattern: /\bvue(?:\.js|js)?\b/i },
+  { label: 'Angular', pattern: /\bangular\b/i },
+  { label: 'Redux', pattern: /\bredux\b/i },
+  { label: 'Zustand', pattern: /\bzustand\b/i },
+  { label: 'TanStack Query', pattern: /\btanstack\s+query\b|\breact\s+query\b/i },
+  { label: 'REST API', pattern: /\brest(?:ful)?\s+api(?:s)?\b/i },
+  { label: 'GraphQL', pattern: /\bgraphql\b/i },
+  { label: 'Prisma', pattern: /\bprisma\b/i },
+  { label: 'PostgreSQL', pattern: /\bpostgres(?:ql)?\b/i },
+  { label: 'MySQL', pattern: /\bmysql\b/i },
+  { label: 'MongoDB', pattern: /\bmongodb\b/i },
+  { label: 'Docker', pattern: /\bdocker\b/i },
+  { label: 'Git', pattern: /\bgit\b/i },
+  { label: 'GitHub', pattern: /\bgithub\b/i },
+  { label: 'AWS', pattern: /\baws\b|\bamazon\s+web\s+services\b/i },
+  { label: 'Firebase', pattern: /\bfirebase\b/i },
+  { label: 'Supabase', pattern: /\bsupabase\b/i },
+  { label: 'Figma', pattern: /\bfigma\b/i },
+  { label: 'Jest', pattern: /\bjest\b/i },
+  { label: 'Playwright', pattern: /\bplaywright\b/i },
+  { label: 'Cypress', pattern: /\bcypress\b/i },
+  { label: 'Vitest', pattern: /\bvitest\b/i },
+  { label: 'Accessibility', pattern: /\baccessibility\b|\bwcag\b/i },
+  { label: 'Responsive UI', pattern: /\bresponsive\s+(?:ui|design|web)\b/i },
+  { label: 'Performance Optimization', pattern: /\bperformance(?:-|\s+)optim(?:ization|isation)\b/i },
+] as const
+
+const CV_SKILL_SECTION_HEADINGS =
+  /^(technical\s+skills|skills|core\s+skills|key\s+skills|technologies|tech\s+stack|tools)$/i
+const CV_SECTION_HEADING =
+  /^(about\s+me|profile|summary|experience|work\s+experience|employment|projects|education|certifications|awards|languages|interests|contact|work\s+authorisation|work\s+authorization)$/i
 
 export class CvServiceError extends Error {
   constructor(
@@ -349,6 +393,96 @@ function extractUrl(value: string, patterns: RegExp[]) {
   return undefined
 }
 
+function normalizeSkill(value: string) {
+  return value
+    .replace(/^[\-•·*|/\\]+/, '')
+    .replace(/[\-•·*|/\\]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function addSkill(skills: string[], value: string) {
+  const skill = normalizeSkill(value)
+
+  if (
+    !skill ||
+    skill.length > 50 ||
+    /https?:\/\//i.test(skill) ||
+    /@/.test(skill) ||
+    /\d{4}/.test(skill)
+  ) {
+    return
+  }
+
+  if (
+    skills.some(
+      (existingSkill) => existingSkill.toLowerCase() === skill.toLowerCase(),
+    )
+  ) {
+    return
+  }
+
+  skills.push(skill)
+}
+
+function extractSkillSectionCandidates(text: string) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const candidates: string[] = []
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!CV_SKILL_SECTION_HEADINGS.test(lines[index])) {
+      continue
+    }
+
+    for (
+      let sectionIndex = index + 1;
+      sectionIndex < lines.length;
+      sectionIndex += 1
+    ) {
+      const line = lines[sectionIndex]
+
+      if (
+        CV_SKILL_SECTION_HEADINGS.test(line) ||
+        CV_SECTION_HEADING.test(line)
+      ) {
+        break
+      }
+
+      candidates.push(line)
+
+      if (candidates.length >= 40) {
+        break
+      }
+    }
+  }
+
+  return candidates.flatMap((candidate) =>
+    candidate
+      .split(/[,;|•·]/)
+      .map(normalizeSkill)
+      .filter((skill) => skill.length >= 2),
+  )
+}
+
+function extractSkillsFromCvText(text: string) {
+  const skills: string[] = []
+
+  for (const { label, pattern } of CV_SKILL_PATTERNS) {
+    if (pattern.test(text)) {
+      addSkill(skills, label)
+    }
+  }
+
+  for (const candidate of extractSkillSectionCandidates(text)) {
+    addSkill(skills, candidate)
+  }
+
+  return skills.slice(0, 30)
+}
+
 function extractProfileFromCvText(text: string): ExtractedCvProfile {
   return {
     username: extractNameFromCvText(text),
@@ -365,6 +499,7 @@ function extractProfileFromCvText(text: string): ExtractedCvProfile {
       /www\.(?!linkedin\.com)(?!github\.com)[A-Za-z0-9-]+\.[A-Za-z]{2,}(?:\/[^\s<>"']*)?/i,
     ]),
     contactNumber: text.match(/(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?){2,5}\d{2,4}/)?.[0]?.trim(),
+    skills: extractSkillsFromCvText(text),
   }
 }
 
@@ -485,6 +620,9 @@ async function applyExtractedProfile(userId: string, profile: ExtractedCvProfile
     ...(profile.githubUrl ? { githubUrl: profile.githubUrl } : {}),
     ...(profile.portfolioUrl ? { portfolioUrl: profile.portfolioUrl } : {}),
     ...(profile.contactNumber ? { contactNumber: profile.contactNumber } : {}),
+    ...(profile.skills && profile.skills.length > 0
+      ? { skills: profile.skills }
+      : {}),
   }
 
   if (Object.keys(data).length === 0) {
@@ -505,6 +643,7 @@ async function applyExtractedProfile(userId: string, profile: ExtractedCvProfile
       githubUrl: true,
       portfolioUrl: true,
       contactNumber: true,
+      skills: true,
     },
   })
 }

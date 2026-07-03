@@ -39,11 +39,6 @@ export function AppSidebar() {
             label: 'Job Management',
             items: [
                 {
-                    name: 'Job Report',
-                    url: '/job-report',
-                    icon: ChartPie,
-                },
-                {
                     name: 'Applied Jobs',
                     url: '/applied-jobs',
                     icon: LayoutDashboardIcon,

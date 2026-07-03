@@ -1,0 +1,5 @@
+[     720ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/1h0h_next_dist_2165rxv._.js:2477
+[     934ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/1h0h_next_dist_2165rxv._.js:2477
+[    1083ms] [WARNING] Image with src "http://localhost:3000/logo/light-full-logo.svg" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio. @ http://localhost:3000/_next/static/chunks/1h0h_next_dist_2165rxv._.js:2477
+[    1274ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/1h0h_next_dist_2165rxv._.js:2477
+[    1276ms] [LOG] [Fast Refresh] done in 103ms @ http://localhost:3000/_next/static/chunks/1h0h_next_dist_2165rxv._.js:2477

@@ -3,10 +3,10 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AxiosError } from 'axios'
-import { FileText, Save, UserCircle } from 'lucide-react'
+import { FileText, Plus, Save, UserCircle, X } from 'lucide-react'
 import Link from 'next/link'
-import type { ChangeEvent } from 'react'
-import { useEffect, useRef } from 'react'
+import type { ChangeEvent, KeyboardEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import ErrorComponent from '@/components/shared/error'
@@ -42,6 +42,7 @@ type ProfileErrorResponse = {
 export default function Page() {
   const queryClient = useQueryClient()
   const cvInputRef = useRef<HTMLInputElement>(null)
+  const [skillInput, setSkillInput] = useState('')
   const form = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
@@ -51,6 +52,7 @@ export default function Page() {
       githubUrl: '',
       portfolioUrl: '',
       contactNumber: '',
+      skills: [],
     },
   })
 
@@ -70,6 +72,7 @@ export default function Page() {
       githubUrl: profile.githubUrl ?? '',
       portfolioUrl: profile.portfolioUrl ?? '',
       contactNumber: profile.contactNumber ?? '',
+      skills: profile.skills ?? [],
     })
   }, [form, profile])
 
@@ -100,6 +103,7 @@ export default function Page() {
         githubUrl: response.profile.githubUrl ?? '',
         portfolioUrl: response.profile.portfolioUrl ?? '',
         contactNumber: response.profile.contactNumber ?? '',
+        skills: response.profile.skills ?? [],
       })
 
       await Promise.all([
@@ -115,6 +119,50 @@ export default function Page() {
 
   function onSubmit(values: ProfileValues) {
     updateProfileMutation.mutate(profileSchema.parse(values))
+  }
+
+  function addSkill() {
+    const skill = skillInput.trim().replace(/\s+/g, ' ')
+
+    if (!skill) return
+
+    const currentSkills = form.getValues('skills') ?? []
+    const hasSkill = currentSkills.some(
+      (currentSkill) => currentSkill.toLowerCase() === skill.toLowerCase(),
+    )
+
+    if (hasSkill) {
+      setSkillInput('')
+      return
+    }
+
+    form.setValue('skills', [...currentSkills, skill], {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    })
+    setSkillInput('')
+  }
+
+  function removeSkill(skill: string) {
+    const currentSkills = form.getValues('skills') ?? []
+
+    form.setValue(
+      'skills',
+      currentSkills.filter((currentSkill) => currentSkill !== skill),
+      {
+        shouldDirty: true,
+        shouldTouch: true,
+        shouldValidate: true,
+      },
+    )
+  }
+
+  function onSkillInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter') return
+
+    event.preventDefault()
+    addSkill()
   }
 
   function onSelectCv(event: ChangeEvent<HTMLInputElement>) {
@@ -319,6 +367,75 @@ export default function Page() {
                       <FormMessage />
                     </FormItem>
                   )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="skills"
+                  render={({ field }) => {
+                    const skills = field.value ?? []
+
+                    return (
+                      <FormItem className="md:col-span-2">
+                        <FormLabel>Skills</FormLabel>
+                        <FormControl>
+                          <div className="space-y-3">
+                            <div className="flex gap-2">
+                              <Input
+                                value={skillInput}
+                                onChange={(event) =>
+                                  setSkillInput(event.target.value)
+                                }
+                                onKeyDown={onSkillInputKeyDown}
+                                placeholder="React, TypeScript, Tailwind CSS"
+                                className="h-10 bg-background"
+                                disabled={isProfileActionPending}
+                              />
+                              <Button
+                                type="button"
+                                size="icon-lg"
+                                className="size-10"
+                                disabled={
+                                  isProfileActionPending || !skillInput.trim()
+                                }
+                                onClick={addSkill}
+                                aria-label="Add skill"
+                              >
+                                <Plus />
+                              </Button>
+                            </div>
+
+                            {skills.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {skills.map((skill) => (
+                                  <span
+                                    key={skill}
+                                    className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-primary/20 bg-primary-soft px-3 py-1 text-xs font-semibold text-primary"
+                                  >
+                                    <span>{skill}</span>
+                                    <button
+                                      type="button"
+                                      className="rounded-full p-0.5 text-primary/70 transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      disabled={isProfileActionPending}
+                                      onClick={() => removeSkill(skill)}
+                                      aria-label={`Remove ${skill}`}
+                                    >
+                                      <X className="size-3" />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                No skills added yet.
+                              </p>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )
+                  }}
                 />
               </div>
 

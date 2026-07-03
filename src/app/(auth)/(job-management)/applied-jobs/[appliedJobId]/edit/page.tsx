@@ -3,14 +3,15 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AxiosError } from 'axios'
-import { Save } from 'lucide-react'
+import { Save, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { toast } from 'sonner'
 import ErrorComponent from '@/components/shared/error'
 import Header from '@/components/shared/header'
+import JobAnalyze from '@/components/shared/job-analyze'
 import Loading from '@/components/shared/loading'
 import {
   Breadcrumb,
@@ -39,12 +40,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { AppliedJobApi, PlatformApi } from '@/lib/api'
+import {
+  AppliedJobApi,
+  JobReportApi,
+  PlatformApi,
+  type SkillMatchReport,
+} from '@/lib/api'
 import {
   appliedJobResponseValues,
+  type GetJobReportValues,
   updateAppliedJobSchema,
 } from '@/lib/schema'
-import { handleError } from '@/lib/utils'
+import { cn, handleError } from '@/lib/utils'
 
 type UpdateAppliedJobFormValues = {
   appliedDate: Date
@@ -61,7 +68,19 @@ type AppliedJobErrorResponse = {
   errors?: Partial<Record<keyof UpdateAppliedJobFormValues, Array<string>>>
 }
 
+type JobReportErrorResponse = {
+  message?: string
+  errors?: Partial<Record<keyof GetJobReportValues, Array<string>>>
+}
+
 export default function Page() {
+  const [analyzedJob, setAnalyzedJob] = useState<{
+    link: string
+    data: {
+      title: string
+      report: SkillMatchReport
+    }
+  } | null>(null)
   const params = useParams<{ appliedJobId: string }>()
   const appliedJobId = params.appliedJobId
   const router = useRouter()
@@ -132,7 +151,40 @@ export default function Page() {
     },
   })
 
+  const jobReportMutation = useMutation({
+    mutationFn: JobReportApi.get,
+    onSuccess: (reportData, values) => {
+      setAnalyzedJob({
+        data: {
+          report: reportData.report,
+          title: reportData.title,
+        },
+        link: values.link,
+      })
+      form.setValue('position', reportData.title, {
+        shouldValidate: true,
+      })
+      toast.success(reportData.message || 'Job analyzed successfully')
+    },
+    onError: (error: AxiosError<JobReportErrorResponse>) => {
+      handleError<JobReportErrorResponse>(error)
+    },
+  })
+
   const appliedDate = form.watch('appliedDate')
+  const jobLink = form.watch('link')
+
+  function analyzeJobLink() {
+    const link = form.getValues('link')?.trim()
+
+    if (!link) {
+      toast.error('Add a job link before analyzing')
+      return
+    }
+
+    jobReportMutation.mutate({ link })
+  }
+
   function onSubmit(values: UpdateAppliedJobFormValues) {
     const payload = {
       ...values,
@@ -282,25 +334,43 @@ export default function Page() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="link"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Job link</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="url"
-                          placeholder="https://example.com/job"
-                          className="h-10 bg-background"
-                          disabled={isBusy}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="flex w-full items-start gap-2">
+                  <FormField
+                    control={form.control}
+                    name="link"
+                    render={({ field }) => (
+                      <FormItem className="w-full">
+                        <FormLabel>Job link</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="url"
+                            placeholder="https://example.com/job"
+                            className="h-10 bg-background"
+                            disabled={isBusy}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button
+                    type="button"
+                    isLoading={jobReportMutation.isPending}
+                    disabled={isBusy || !jobLink?.trim()}
+                    onClick={analyzeJobLink}
+                    className={cn(
+                      'relative mt-5 h-10 overflow-hidden rounded-md border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary),transparent_82%)] hover:border-primary/50 hover:bg-primary/15 hover:text-primary',
+                      'before:absolute before:inset-y-0 before:left-[-40%] before:w-1/3 before:skew-x-[-20deg] before:bg-white/35 before:opacity-0 before:transition-all before:duration-500 hover:before:left-[120%] hover:before:opacity-100',
+                      'disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:before:hidden',
+                    )}
+                  >
+                    <span className="relative flex items-center gap-1.5">
+                      <Sparkles className="size-3.5" />
+                      Analyze Job
+                    </span>
+                  </Button>
+                </div>
 
                 <FormField
                   control={form.control}
@@ -391,6 +461,10 @@ export default function Page() {
                   Save changes
                 </Button>
               </div>
+              <JobAnalyze
+                isLoading={jobReportMutation.isPending}
+                data={analyzedJob}
+              />
             </form>
           </Form>
         </div>

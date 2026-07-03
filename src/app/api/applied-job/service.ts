@@ -473,6 +473,7 @@ export function buildFollowUpEmailStream(
     profile.linkedInUrl ? `LinkedIn: ${profile.linkedInUrl}` : null,
     profile.githubUrl ? `GitHub: ${profile.githubUrl}` : null,
     profile.portfolioUrl ? `Portfolio: ${profile.portfolioUrl}` : null,
+    profile.skills.length > 0 ? `Skills: ${profile.skills.join(', ')}` : null,
   ].filter(Boolean)
   const jobContext = [
     `Applied position: ${appliedJob.position}`,

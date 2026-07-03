@@ -1,0 +1,38 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e3]:
+      - img "JobCommit" [ref=e5]
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - paragraph [ref=e8]: Welcome back
+          - heading "Sign in to JobCommit" [level=1] [ref=e9]
+          - paragraph [ref=e10]: Track applications, follow-ups, and every next step in one place.
+        - generic [ref=e11]:
+          - generic [ref=e12]:
+            - generic [ref=e13]: Email
+            - textbox "Email" [ref=e14]:
+              - /placeholder: you@example.com
+              - text: prajwolneupane68@gmail.com
+          - generic [ref=e15]:
+            - generic [ref=e16]: Password
+            - generic [ref=e17]:
+              - textbox "Password" [ref=e18]:
+                - /placeholder: Enter your password
+                - text: Pa$$w0rd
+              - button "Show password" [ref=e19]:
+                - img
+          - link "Forgot password?" [ref=e21] [cursor=pointer]:
+            - /url: /forgot-password
+          - button "Sign in" [ref=e22]
+        - generic [ref=e27]: Or sign in with Google
+        - button "Continue with Google" [ref=e28]:
+          - img
+          - text: Continue with Google
+        - paragraph [ref=e29]:
+          - text: Don't have an account?
+          - link "Create one" [ref=e30] [cursor=pointer]:
+            - /url: /signup
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e36] [cursor=pointer]:
+    - img [ref=e37]
+  - alert [ref=e40]

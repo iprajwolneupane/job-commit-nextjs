@@ -28,6 +28,7 @@ export async function getCurrentUser(request: NextRequest) {
           githubUrl: true,
           portfolioUrl: true,
           contactNumber: true,
+          skills: true,
         },
       },
     },
