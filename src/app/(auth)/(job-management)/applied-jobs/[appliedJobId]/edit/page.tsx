@@ -135,6 +135,22 @@ export default function Page() {
     })
   }, [data, form])
 
+  useEffect(() => {
+    const platformId = data?.appliedJob?.platformId
+
+    if (!platformId || !platformsData?.platforms.length) return
+
+    const platformExists = platformsData.platforms.some(
+      (platform) => platform.id === platformId,
+    )
+
+    if (!platformExists) return
+
+    form.setValue('platformId', platformId, {
+      shouldValidate: true,
+    })
+  }, [data?.appliedJob?.platformId, form, platformsData?.platforms])
+
   const updateAppliedJobMutation = useMutation({
     mutationFn: AppliedJobApi.update,
     onSuccess: async () => {
@@ -300,7 +316,8 @@ export default function Page() {
                     <FormItem>
                       <FormLabel>Platform</FormLabel>
                       <Select
-                        value={field.value}
+                        key={field.value}
+                        value={field.value || undefined}
                         onValueChange={field.onChange}
                         disabled={isBusy || isPlatformsPending}
                       >

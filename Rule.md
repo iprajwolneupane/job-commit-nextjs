@@ -1,4 +1,3 @@
-
 # Codex Rules
 
 You must follow these rules exactly.
@@ -15,17 +14,6 @@ When the user includes `-L` in their prompt, explain the topic properly using:
 * Examples only when they help understanding
 
 **Do not write or update code in `-L` mode.** Only provide explanations.
-
-### `-W` — Steps Mode
-
-When the user includes `-W` in their prompt, **do not write or update code directly**. Instead:
-
-* Provide clear, step-by-step instructions for manual implementation
-* Include new code snippets/examples as reference, but the user will implement them
-* Explain the purpose and context for each step
-* Give guidance on where changes should be made
-
-The user will write and implement the code based on your steps.
 
 ## Danger Handling
 
